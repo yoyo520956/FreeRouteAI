@@ -249,25 +249,12 @@ public final class GatewayServer: @unchecked Sendable {
 
     // MARK: 连接处理
 
-    /// NWEndpoint / NWHostAddress 都不保证有 description，逐层 pattern match 取主机
-    private static func hostName(of endpoint: NWEndpoint) -> String? {
-        guard case let .hostPort(host, _) = endpoint else { return nil }
-        switch host {
-        case let .name(n):
-            return n
-        case let .address(addr):
-            // NWHostAddress 只有 ipv4 / ipv6 两个载荷，IPv4Address/IPv6Address 有 description
-            if case let .ipv4(v4) = addr { return v4.description }
-            if case let .ipv6(v6) = addr { return v6.description }
-            return nil
-        @unknown default:
-            return nil
-        }
-    }
-
+    /// 回环判断。不用 `endpoint.description`（NWEndpoint 未实现 CustomStringConvertible），
+    /// 也不模式匹配 NWEndpoint.Host —— 它的 case 名跨 SDK 不稳定（iOS 27 SDK 已无 .address）。
+    /// `String(describing:)` 对任意类型都可用，够判断回环。
     private func isLoopback(_ endpoint: NWEndpoint) -> Bool {
-        guard let h = Self.hostName(of: endpoint) else { return false }
-        return h == "localhost" || h == "::1" || h.hasPrefix("127.")
+        let s = String(describing: endpoint)
+        return s.contains("127.") || s.contains("::1") || s.contains("localhost")
     }
 
     private func accept(_ conn: NWConnection) {
