@@ -81,16 +81,37 @@ public enum AdapterFactory {
 
 enum URLCompose {
     static func join(_ base: String, _ path: String) throws -> URL {
-        var b = base
+        var b = base.trimmingCharacters(in: .whitespacesAndNewlines)
         while b.hasSuffix("/") { b.removeLast() }
         var p = path
         if !p.hasPrefix("/") { p = "/" + p }
+        // 用户常把 baseURL 填成含版本段的 https://host/v1beta，而适配器路径自带
+        // /v1beta/...，拼出 /v1beta/v1beta/... 会直接 404。版本段重复时丢掉适配器那份。
+        if let last = b.split(separator: "/").last, isVersionSegment(String(last)),
+           p.hasPrefix("/" + last + "/") {
+            p = String(p.dropFirst(("/" + last).count))
+        }
         let s = b + p
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "{}")
         let escaped = s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s
-        guard let url = URL(string: escaped) else { throw AdapterError.badBaseURL(s) }
+        // 必须带 http/https：URL(string:) 对「不是网址」这类输入也会成功（当成相对 URL），
+        // 不校验 scheme 就会把一个根本没有主机的 URL 发出去，错误信息还很难懂。
+        guard let url = URL(string: escaped),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { throw AdapterError.badBaseURL(s) }
         return url
+    }
+
+    /// 判断是否 /v1、/v1beta、/v2alpha 这类版本路径段
+    private static func isVersionSegment(_ seg: String) -> Bool {
+        guard seg.hasPrefix("v"), seg.count >= 2 else { return false }
+        let rest = Array(seg.dropFirst())
+        var i = 0
+        while i < rest.count, rest[i].isNumber { i += 1 }
+        guard i > 0 else { return false }
+        return rest[i...].allSatisfy { $0.isLetter }
     }
 }
 
@@ -113,6 +134,10 @@ enum FRJSON {
     }
     static func object(_ data: Data) -> [String: JSONValue]? {
         if case .object(let o) = FRJSON.any(data) { return o }
+        return nil
+    }
+    static func array(_ data: Data) -> [JSONValue]? {
+        if case .array(let a) = FRJSON.any(data) { return a }
         return nil
     }
     static func text(_ v: JSONValue?) -> String? { v?.string }

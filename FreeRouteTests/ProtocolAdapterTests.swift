@@ -81,7 +81,10 @@ final class ProtocolAdapterTests: XCTestCase {
     func testAnthropicSSEParsing() throws {
         let p = provider(.anthropic, .anthropic, base: "https://api.anthropic.com")
         let adapter = AdapterFactory.adapter(for: .anthropic)
-        let line = "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"片段\"}}"
+        // SSE 里 event: 与 data: 是两行，按行喂给解析器
+        XCTAssertNil(adapter.parseStreamLine("event: content_block_delta", provider: p),
+                     "event: 行只标注类型，不该产出内容")
+        let line = "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"片段\"}}"
         let piece = adapter.parseStreamLine(line, provider: p)
         XCTAssertEqual(piece?.text, "片段")
         let doneLine = "data: {\"type\":\"message_stop\"}"
@@ -99,7 +102,9 @@ final class ProtocolAdapterTests: XCTestCase {
             .chatCall(provider: p, apiKey: "AIza", request: r)
         let url = call.url.absoluteString
         XCTAssertTrue(url.contains("models/gemini-2.0-flash:streamGenerateContent"), url)
-        XCTAssertTrue(url.contains("key=AIza"), "Gemini 用 query 传 key")
+        // 密钥走 x-goog-api-key 头，不进 URL —— 避免把 key 落进代理与崩溃日志
+        XCTAssertEqual(call.headers["x-goog-api-key"], "AIza")
+        XCTAssertFalse(url.contains("AIza"), "密钥不应出现在 URL 里")
     }
 
     func testGeminiNonStreamUsesGenerateContent() throws {
@@ -115,8 +120,12 @@ final class ProtocolAdapterTests: XCTestCase {
     func testGeminiStreamParsing() throws {
         let p = provider(.gemini, .gemini, base: "https://generativelanguage.googleapis.com")
         let adapter = AdapterFactory.adapter(for: .gemini)
-        let line = "data: [{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"你好\"}]}}]}]"
-        XCTAssertEqual(adapter.parseStreamLine(line, provider: p)?.text, "你好")
+        // alt=sse：每个 data: 是一个 JSON 对象
+        let objLine = "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"你好\"}]}}]}"
+        XCTAssertEqual(adapter.parseStreamLine(objLine, provider: p)?.text, "你好")
+        // 兼容网关下发数组包裹的形状
+        let arrLine = "data: [{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"世界\"}]}}]}]"
+        XCTAssertEqual(adapter.parseStreamLine(arrLine, provider: p)?.text, "世界")
     }
 
     // MARK: Ollama

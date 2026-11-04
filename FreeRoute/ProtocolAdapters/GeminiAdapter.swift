@@ -130,8 +130,16 @@ public struct GeminiAdapter: ProtocolAdapter {
         var s = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { return nil }
         if s.hasPrefix("data:") { s = String(s.dropFirst(5)).trimmingCharacters(in: .whitespaces) }
+        // alt=sse 下发 JSON 对象；个别兼容网关会下发数组包一个对象，两种都接住
+        if let arr = FRJSON.array(Data(s.utf8)), let first = arr.first {
+            guard case .object(let obj) = first else { return nil }
+            return handle(root: obj)
+        }
         guard let root = FRJSON.object(Data(s.utf8)) else { return nil }
+        return handle(root: root)
+    }
 
+    private func handle(root: [String: JSONValue]) -> StreamPiece? {
         var piece = StreamPiece()
         if case .array(let cands)? = root["candidates"], let first = cands.first {
             if case .array(let parts)? = first["content"]?.object?["parts"] {

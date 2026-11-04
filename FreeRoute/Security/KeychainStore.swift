@@ -60,6 +60,7 @@ public final class KeychainStore: Sendable {
 
     /// 展示用掩码：前 4 + … + 后 4（短于 10 位显示长度）
     public static func mask(_ key: String) -> String {
+        if key.isEmpty { return "未设置" }   // 空串会让界面出现空白密钥行
         guard key.count > 10 else { return String(repeating: "•", count: key.count) }
         return String(key.prefix(4)) + "…" + String(key.suffix(4))
     }
