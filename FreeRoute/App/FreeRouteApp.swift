@@ -35,8 +35,9 @@ final class AppCoordinator {
         self.app = app
         app.gateway.onLog = { [weak self] msg in self?.appendSystem(msg) }
         app.statistics.bind(app)
-        NotificationCenter.default.addObserver(forName: ScenePhaseObserver.didEnterBackground, object: nil, queue: .main) { _ in
-            Task { @MainActor in self.liveActivity.refresh(for: self?.app) }
+        NotificationCenter.default.addObserver(forName: ScenePhaseObserver.didEnterBackground, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in self.liveActivity.refresh(for: self.app) }
         }
     }
 
@@ -65,6 +66,7 @@ struct RootView: View {
 
     var body: some View {
         @Bindable var app = app
+        @Bindable var coordinator = coordinator
         TabView(selection: $coordinator.tab) {
             HomeView()
                 .tabItem { Label("首页", systemImage: "square.grid.2x2.fill") }.tag(0)

@@ -1,6 +1,24 @@
 import Foundation
 import Observation
 
+/// 跨线程安全读取的网关参数快照。
+/// GatewayServer 的 isLANEnabled / portProvider 是 @Sendable 闭包，
+/// 直接读 @MainActor 的 app.settings 会报「main actor-isolated property
+/// can not be referenced from a Sendable closure」（Xcode 26.6 实测），
+/// 因此把这两个值放进带锁的快照里，由 MainActor 侧同步。
+final class GatewayFlags: @unchecked Sendable {
+    private let lock = NSLock()
+    private var portValue = 3000
+    private var lanValue = false
+
+    func update(port: Int, lan: Bool) {
+        lock.lock(); portValue = port; lanValue = lan; lock.unlock()
+    }
+
+    var port: Int { lock.lock(); defer { lock.unlock() }; return portValue }
+    var lan: Bool { lock.lock(); defer { lock.unlock() }; return lanValue }
+}
+
 /// 网关控制器：路由分发 + 鉴权 + OpenAI 兼容响应（本机 / 局域网）
 @MainActor
 @Observable
@@ -12,12 +30,20 @@ public final class GatewayController {
     private weak var app: AppState?
     private var server: GatewayServer?
     private var ticket = AsyncSemaphore(value: 8)
+    private let flags = GatewayFlags()
 
     public init() {}
+
+    /// 把 MainActor 上的设置同步到跨线程快照
+    private func syncFlags() {
+        guard let app else { return }
+        flags.update(port: app.settings.gatewayPort, lan: app.settings.gatewayLANEnabled)
+    }
 
     func bind(_ app: AppState) {
         self.app = app
         ticket = AsyncSemaphore(value: max(1, app.settings.maxConcurrentRequests))
+        syncFlags()
         let s = GatewayServer(
             statusHandler: { [weak self] newStatus in
                 Task { @MainActor in
@@ -31,8 +57,8 @@ public final class GatewayController {
                     await self?.dispatch(req, ex)
                 }
             },
-            isLANEnabled: { [weak self] in self?.app?.settings.gatewayLANEnabled ?? false },
-            portProvider: { [weak self] in self?.app?.settings.gatewayPort ?? 3000 }
+            isLANEnabled: { [flags] in flags.lan },
+            portProvider: { [flags] in flags.port }
         )
         server = s
         status = s.snapshot()
@@ -43,6 +69,7 @@ public final class GatewayController {
     public func start() async {
         guard let server, let app else { return }
         isStarting = true
+        syncFlags()
         ticket = AsyncSemaphore(value: max(1, app.settings.maxConcurrentRequests))
         server.start()
         try? await Task.sleep(nanoseconds: 400_000_000)
@@ -66,6 +93,7 @@ public final class GatewayController {
     }
 
     public func refreshStatus() {
+        syncFlags()   // 用户在设置里改端口/局域网开关后不必重启也能生效
         if let s = server { status = s.snapshot() }
     }
 

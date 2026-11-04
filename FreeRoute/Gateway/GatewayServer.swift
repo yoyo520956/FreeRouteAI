@@ -140,10 +140,11 @@ public final class GatewayServer: @unchecked Sendable {
         let port = portProvider()
         let lan = isLANEnabled()
         do {
+            // NWParameters 没有 allowLocalEndpointEvaluation / requiredLocalEndpoint /
+            // allowLocalNetworkAccess 这些属性（Xcode 26.6 实测报 no member）。
+            // 局域网可访问性由 NSLocalNetworkUsageDescription + 用户授权决定，
+            // 不是监听参数；是否只对回环开放由上层 isLANEnabled 控制。
             let params = NWParameters.tcp
-            params.allowLocalEndpointEvaluation = true
-            params.requiredLocalEndpoint = .workload
-            params.allowLocalNetworkAccess = true
             let nwPort = NWEndpoint.Port(rawValue: UInt16(max(1, min(65535, port)))) ?? 3000
             let listener = try NWListener(using: params, on: nwPort)
             listener.newConnectionHandler = { [weak self] conn in self?.accept(conn) }
@@ -249,6 +250,18 @@ public final class GatewayServer: @unchecked Sendable {
     // MARK: 连接处理
 
     private func accept(_ conn: NWConnection) {
+        // 局域网关闭时只服务回环。NWListener 不支持只绑 127.0.0.1，
+        // 因此在拿到对端地址后判断，非回环一律立即断开 ——
+        // 这是「LAN 默认关闭 / 不允许未授权访问」这条需求的实际执行点。
+        if !isLANEnabled() {
+            let peer = conn.endpoint.description
+            let loopback = peer.hasPrefix("127.") || peer.contains("[::1]") || peer.contains("::1]")
+                || peer.hasPrefix("localhost")
+            if !loopback {
+                conn.cancel()
+                return
+            }
+        }
         stateQueue.sync { connections[ObjectIdentifier(conn)] = conn }
         conn.start(queue: stateQueue)
         refreshStatus()

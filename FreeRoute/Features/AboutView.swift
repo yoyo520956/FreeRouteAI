@@ -41,7 +41,7 @@ struct AboutView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(FRDesign.accent)
                 Text("One Gateway. Every Model. Smarter Routing.")
-                    .font(.system(size: 11, design: .italic))
+                    .font(.system(size: 11)).italic()
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
