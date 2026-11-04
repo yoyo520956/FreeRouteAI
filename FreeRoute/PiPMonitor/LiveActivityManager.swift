@@ -6,14 +6,15 @@ import Observation
 @MainActor
 @Observable
 public final class LiveActivityManager {
-    public private(set) var isAvailable: Bool = ActivityAuthorizationInfo(for: FRMonitorAttributes.self).areActivitiesEnabled
+    public private(set) var isAvailable: Bool = false
     public private(set) var isActive: Bool = false
     public private(set) var statusText: String = "未启用"
     private var activity: Activity<FRMonitorAttributes>?
     private var refreshTask: Task<Void, Never>?
 
     public init() {
-        refresh()
+        // refresh(for:) 需要 for: 参数（CI 实测 missing argument for parameter 'for'）
+        refresh(for: nil)
     }
 
     public func refresh(for app: AppState?) {

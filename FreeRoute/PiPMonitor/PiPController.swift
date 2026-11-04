@@ -284,12 +284,6 @@ final class PictureInPictureDelegate: NSObject, AVPictureInPictureControllerDele
         false
     }
 
-    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController,
-                                    transitionTo playbackState: AVPictureInPictureController.PlaybackState,
-                                    withCompletionHandler completionHandler: @escaping () -> Void) {
-        completionHandler()
-    }
-
     func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
         false
     }
