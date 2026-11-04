@@ -31,7 +31,8 @@ def main():
     for runtime, devs in data.items():
         if 'iOS' not in runtime:
             continue
-        rt_os = runtime.split('runtime.com.apple.CoreSimulator.SimRuntime.iOS-')[-1]
+        # 键形如 com.apple.CoreSimulator.SimRuntime.iOS-26-2
+        rt_os = runtime.split('iOS-')[-1].replace('-', '.') if 'iOS-' in runtime else runtime
         for d in devs:
             if not d.get('name', '').startswith('iPhone'):
                 continue

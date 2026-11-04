@@ -114,49 +114,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
 
       # ── 步骤 6–7：测试 ──
-      - name: 选择模拟器（Runner 无 SE3，按可用机型回退）
-        id: sim
-        if: always()
-        run: python3 tools/pick-simulator.py
-      - name: 步骤 6 · 单元测试
-        id: unit
-        if: success() && steps.simbuild.outcome == 'success'
-        run: |
-          set -o pipefail
-          xcodebuild test \
-            -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "id=${{ steps.sim.outputs.ud }}" \
-            -only-testing:FreeRouteTests \
-            -derivedDataPath "$DERIVED" \
-            -enableCodeCoverage YES \
-            -resultBundlePath UnitTests.xcresult \
-            CODE_SIGNING_ALLOWED=NO
-      - name: 步骤 7 · UI 测试（逐屏截图）
-        id: uitest
-        if: success() && steps.unit.outcome == 'success' && github.event.inputs.run_ui_tests != 'false'
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          xcodebuild test \
-            -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "id=${{ steps.sim.outputs.ud }}" \
-            -only-testing:FreeRouteUITests \
-            -derivedDataPath "$DERIVED" \
-            -resultBundlePath UITests.xcresult \
-            CODE_SIGNING_ALLOWED=NO
-      - name: 收集截图
-        if: always()
-        run: |
-          python3 tools/collect-screenshots.py || true
-          {
-            echo "## 截图产出"
-            if [ -d screenshots ] && [ -n "$(find screenshots -maxdepth 1 -name '*.png' -print -quit)" ]; then
-              find screenshots -maxdepth 1 -name '*.png' -printf '  - %f\n';
-            else echo "- 无（UI 测试未执行或未产出附件）"; fi
-            echo "- 以上如存在，均为 **iOS 模拟器**截图，不等同于真机截图。"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # ── 步骤 8–11：Archive / IPA / 产物 / 报告 ──
       - name: 未签名模式
         if: env.SIGNING == 'none' || env.SIGNING == ''
         run: echo "CODE_SIGN_ARGS=CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=" >> "$GITHUB_ENV"
@@ -189,7 +146,7 @@ jobs:
           [ -n "$TEAM" ] || { echo "缺少 Secret: APPLE_TEAM_ID"; exit 1; }
           echo "CODE_SIGN_ARGS=-allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=Apple Development CODE_SIGNING_ALLOWED=YES" >> "$GITHUB_ENV"
 
-      - name: 步骤 8 · Archive（Release，真机 arm64）
+      - name: 步骤 6 · Archive（Release，真机 arm64）
         id: archive
         if: success() && steps.simbuild.outcome == 'success'
         run: |
@@ -201,7 +158,7 @@ jobs:
             -archivePath "$RUNNER_TEMP/FreeRoute.xcarchive" \
             -configuration Release \
             $CODE_SIGN_ARGS
-      - name: 步骤 9 · 导出 IPA
+      - name: 步骤 7 · 导出 IPA
         if: success() && steps.archive.outcome == 'success'
         run: |
           python3 tools/make-export-options.py "${SIGNING:-none}"
@@ -218,6 +175,52 @@ jobs:
               -allowProvisioningUpdates
             cp "$RUNNER_TEMP/export/"*.ipa FreeRoute.ipa
           fi
+      - name: 选择模拟器（Runner 无 SE3，按可用机型回退）
+        id: sim
+        if: always()
+        run: python3 tools/pick-simulator.py
+      - name: 步骤 8 · 单元测试
+        id: unit
+        if: success() && steps.simbuild.outcome == 'success'
+        run: |
+          set -o pipefail
+          echo "--- 宿主注入实测值（测试解析不到模块时先看这里）---"
+          xcodebuild -project "$PROJECT" -target FreeRouteTests -showBuildSettings 2>/dev/null \
+            | grep -E "TEST_HOST|BUNDLE_LOADER|ENABLE_TESTABILITY|PRODUCT_MODULE_NAME" || true
+          xcodebuild test \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "id=${{ steps.sim.outputs.ud }}" \
+            -only-testing:FreeRouteTests \
+            -derivedDataPath "$DERIVED" \
+            -enableCodeCoverage YES \
+            -resultBundlePath UnitTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      - name: 步骤 9 · UI 测试（逐屏截图）
+        id: uitest
+        if: success() && steps.unit.outcome == 'success' && github.event.inputs.run_ui_tests != 'false'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$PROJECT" -scheme "$SCHEME" \
+            -destination "id=${{ steps.sim.outputs.ud }}" \
+            -only-testing:FreeRouteUITests \
+            -derivedDataPath "$DERIVED" \
+            -resultBundlePath UITests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      - name: 收集截图
+        if: always()
+        run: |
+          python3 tools/collect-screenshots.py || true
+          {
+            echo "## 截图产出"
+            if [ -d screenshots ] && [ -n "$(find screenshots -maxdepth 1 -name '*.png' -print -quit)" ]; then
+              find screenshots -maxdepth 1 -name '*.png' -printf '  - %f\n';
+            else echo "- 无（UI 测试未执行或未产出附件）"; fi
+            echo "- 以上如存在，均为 **iOS 模拟器**截图，不等同于真机截图。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── 步骤 8–11：Archive / IPA / 产物 / 报告 ──
       - name: 步骤 10 · 上传产物
         if: always()
         uses: actions/upload-artifact@v4

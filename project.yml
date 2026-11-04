@@ -37,6 +37,8 @@ targets:
         PRODUCT_MODULE_NAME: FreeRoute
         SWIFT_EMIT_LOC_STRINGS: "YES"
         ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+        # @testable import 需要被测 target 带可测试性（Debug 默认有，显式写避免 Release 配置缺）
+        ENABLE_TESTABILITY: "YES"
     dependencies:
       - target: FreeRouteWidget
 
@@ -68,6 +70,10 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.freeroute.ai.tests
         GENERATE_INFOPLIST_FILE: "YES"
+        # 宿主注入：没有这两项，测试 bundle 里的 @testable import FreeRoute
+        # 会报 Unable to resolve module dependency: 'FreeRoute'
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/FreeRoute.app/FreeRoute"
+        BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
       - target: FreeRoute
 
@@ -80,6 +86,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.freeroute.ai.uitests
         GENERATE_INFOPLIST_FILE: "YES"
+        # UI 测试要能把 App 装进模拟器并启动，必须指明被测 target
+        TEST_TARGET_NAME: FreeRoute
     dependencies:
       - target: FreeRoute
 
