@@ -6,7 +6,7 @@ import Observation
 @MainActor
 @Observable
 public final class LiveActivityManager {
-    public private(set) var isAvailable: Bool = false
+    public private(set) var isAvailable: Bool = ActivityAuthorizationInfo().areActivitiesEnabled
     public private(set) var isActive: Bool = false
     public private(set) var statusText: String = "未启用"
     private var activity: Activity<FRMonitorAttributes>?
@@ -18,7 +18,7 @@ public final class LiveActivityManager {
     }
 
     public func refresh(for app: AppState?) {
-        isAvailable = ActivityAuthorizationInfo(for: FRMonitorAttributes.self).areActivitiesEnabled
+        isAvailable = ActivityAuthorizationInfo().areActivitiesEnabled
         activity = Activity<FRMonitorAttributes>.activities.first
         isActive = activity != nil
         if let activity {
@@ -49,13 +49,13 @@ public final class LiveActivityManager {
     }
 
     public func start(for app: AppState?) async {
-        guard ActivityAuthorizationInfo(for: FRMonitorAttributes.self).areActivitiesEnabled else {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             statusText = "请到 系统设置 → 自由路由 → Live Activity 打开"
             isAvailable = false
             return
         }
         #if os(iOS)
-        guard ActivityAuthorizationInfo(for: FRMonitorAttributes.self).areActivitiesEnabled else {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else {
             statusText = "系统未授权 Live Activity"
             return
         }
