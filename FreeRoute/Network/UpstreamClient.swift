@@ -64,7 +64,7 @@ public final class UpstreamClient: Sendable {
     public func stream(call: UpstreamCall, timeout: TimeInterval,
                        adapter: ProtocolAdapter, provider: Provider) -> AsyncThrowingStream<StreamPiece, Error> {
         AsyncThrowingStream { continuation in
-            let task = session.dataTask(for: call.urlRequest(timeout: timeout))
+            let task = session.dataTask(with: call.urlRequest(timeout: timeout))
             let delegate = StreamingDelegate(continuation: continuation, adapter: adapter, provider: provider)
             let holder = SessionDelegateHolder(delegate: delegate)
             task.resume()

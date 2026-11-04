@@ -34,11 +34,11 @@ struct StatisticsView: View {
 
     // MARK: - 时间范围
 
-    private func rangeCard(_ stats: Binding<StatisticsEngine>) -> some View {
+    private func rangeCard(_ days: Binding<Int>) -> some View {
         FRCard {
             VStack(alignment: .leading, spacing: 8) {
                 Text("时间范围").font(.system(size: 12, weight: .semibold))
-                Picker("时间范围", selection: stats.rangeDays) {
+                Picker("时间范围", selection: days) {
                     Text("近 7 天").tag(7)
                     Text("近 14 天").tag(14)
                     Text("近 30 天").tag(30)
@@ -166,7 +166,7 @@ struct StatisticsView: View {
                 chartEmpty()
             } else {
                 Chart(app.statistics.latencySeries) { p in
-                    ScatterMark(x: .value("时间", p.time), y: .value("延迟 ms", p.ms))
+                    PointMark(x: .value("时间", p.time), y: .value("延迟 ms", p.ms))
                         .foregroundStyle(FRDesign.warn)
                         .symbolSize(12)
                 }

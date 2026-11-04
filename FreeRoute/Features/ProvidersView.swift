@@ -252,7 +252,8 @@ private struct PVRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
 
-                if let note = provider.notes, !note.isEmpty {
+                if !provider.notes.isEmpty {
+                    let note = provider.notes
                     Text(note)
                         .font(.system(size: 10.5))
                         .foregroundStyle(.secondary)
