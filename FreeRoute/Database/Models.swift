@@ -122,7 +122,7 @@ public final class DBModel {
         self.providerName = model.providerName
         self.modelID = model.modelID
         self.displayName = model.displayName
-        self.capabilitiesRaw = capabilities.joined(separator: ",")
+        self.capabilitiesRaw = capabilities.map(\.rawValue).joined(separator: ",")
         self.contextLength = model.contextLength
         self.maxOutputTokens = model.maxOutputTokens
         self.inputPricePer1K = model.inputPricePer1K

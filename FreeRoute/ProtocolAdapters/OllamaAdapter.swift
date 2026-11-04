@@ -122,7 +122,7 @@ public struct OllamaAdapter: ProtocolAdapter {
         var items: [EmbeddingItem] = []
         for (i, v) in arr.enumerated() {
             var vec: [Double] = []
-            if case .array(let nums)? = v { vec = nums.compactMap { $0.number } }
+            if case .array(let nums) = v { vec = nums.compactMap { $0.number } }
             items.append(EmbeddingItem(object: "embedding", index: i, embedding: vec))
         }
         return EmbeddingsResponse(object: "list", model: provider.name, data: items, usage: nil)

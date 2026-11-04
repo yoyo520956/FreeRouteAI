@@ -97,7 +97,7 @@ public final class PiPController {
 
         var tb: CMTimebase?
         if CMTimebaseCreateWithSourceClock(allocator: kCFAllocatorDefault,
-                                           clock: CMClock.getHostClock(),
+                                           sourceClock: CMClockGetHostTimeClock(),
                                            timebaseOut: &tb) == noErr, let tb {
             timebase = tb
             displayLayer.controlTimebase = tb
@@ -106,7 +106,7 @@ public final class PiPController {
         }
 
         let source = AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer: displayLayer,
-                                                                playbackRate: Float(fps))
+                                                                playbackDelegate: PictureInPictureDelegate.shared)
         let controller = AVPictureInPictureController(contentSource: source)
         controller.delegate = PictureInPictureDelegate.shared
         PictureInPictureDelegate.shared.onStop = { [weak self] in
@@ -215,9 +215,12 @@ public final class PiPController {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = false
+        // draw(_:) 内部按 bounds 绘制，这里先把视图尺寸对齐到目标帧，
+        // 否则画出来的内容与 renderer 尺寸不一致会被裁掉
+        view.frame = CGRect(origin: .zero, size: frameSize)
         let renderer = UIGraphicsImageRenderer(size: frameSize, format: format)
         let image = renderer.image { _ in
-            view.redraw(at: frameSize)
+            view.draw(CGRect(origin: .zero, size: frameSize))
         }
         guard let cg = image.cgImage else { return nil }
         let width = Int(cg.width) / 2 * 2
@@ -262,13 +265,34 @@ public final class PiPController {
                                                               sampleTiming: &timing,
                                                               sampleBufferOut: &sample)
         guard status == noErr, let sample else { return }
-        displayLayer.append(sample)
+        displayLayer.enqueue(sample)
     }
 }
 
-final class PictureInPictureDelegate: NSObject, AVPictureInPictureControllerDelegate {
+final class PictureInPictureDelegate: NSObject, AVPictureInPictureControllerDelegate,
+                                    AVPictureInPictureSampleBufferPlaybackDelegate {
     static let shared = PictureInPictureDelegate()
     var onStop: (() -> Void)?
+
+    // ContentSource 用 sample-buffer 模式时必须给 playbackDelegate；
+    // 监控画面是「一直在动的实时画面」，所以对外表现为持续播放、无进度可拖。
+    func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController: AVPictureInPictureController) -> CMTimeRange {
+        CMTimeRange(start: .zero, duration: .positiveInfinity)
+    }
+
+    func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
+        false
+    }
+
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController,
+                                    transitionTo playbackState: AVPictureInPictureController.PlaybackState,
+                                    withCompletionHandler completionHandler: @escaping () -> Void) {
+        completionHandler()
+    }
+
+    func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
+        false
+    }
 
     func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         onStop?()

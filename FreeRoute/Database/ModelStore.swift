@@ -1,7 +1,10 @@
 import Foundation
 import SwiftData
 
-/// 数据库门面：实体增删查与统计查询
+/// 数据库门面：实体增删查与统计查询。
+/// SwiftData 的 `ModelContainer.mainContext` 是 @MainActor 隔离的，
+/// 而本类只在主 actor 上用（AppState 同为 @MainActor），因此整体标 @MainActor。
+@MainActor
 public final class ModelStore {
     private let container: ModelContainer
 

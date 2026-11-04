@@ -36,6 +36,13 @@ public enum JSONValue: Codable, Hashable, Sendable {
         default: return nil
         }
     }
+    public var bool: Bool? {
+        switch self {
+        case .bool(let v): return v
+        case .number(let v): return v != 0
+        default: return nil
+        }
+    }
     public var object: [String: JSONValue]? { if case .object(let v) = self { return v }; return nil }
     public var array: [JSONValue]? { if case .array(let v) = self { return v }; return nil }
     public subscript(key: String) -> JSONValue? {

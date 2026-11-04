@@ -38,7 +38,7 @@ public final class KeychainStore: Sendable {
         var query = baseQuery()
         query[kSecAttrAccount as String] = key
         query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitFirst
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         guard status == errSecSuccess, let data = result as? Data else { return nil }
