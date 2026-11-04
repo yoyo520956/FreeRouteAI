@@ -74,7 +74,7 @@ jobs:
         run: |
           swift --version
           xcodebuild -showsdks | grep -i iphoneos || true
-          ls /Applications | grep -i '^Xcode' || true
+          printf '%s\n' /Applications/Xcode* 2>/dev/null || true
       - name: SDK 现实核查（不偷换 SDK 假装达标）
         if: always()
         run: |
@@ -154,7 +154,9 @@ jobs:
           python3 tools/collect-screenshots.py || true
           {
             echo "## 截图产出"
-            if [ -d screenshots ]; then ls screenshots | sed 's/^/- /'; else echo "- 无（UI 测试未执行或未产出附件）"; fi
+            if [ -d screenshots ] && [ -n "$(find screenshots -maxdepth 1 -name '*.png' -print -quit)" ]; then
+              find screenshots -maxdepth 1 -name '*.png' -printf '  - %f\n';
+            else echo "- 无（UI 测试未执行或未产出附件）"; fi
             echo "- 以上如存在，均为 **iOS 模拟器**截图，不等同于真机截图。"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -240,7 +242,7 @@ jobs:
             echo "- Xcode：\`$(xcodebuild -version 2>/dev/null | head -1)\`"
             echo "- Swift：\`$(swift --version 2>&1 | head -1)\`"
             echo "- IPA 产物："
-            ls -la FreeRoute*.ipa 2>/dev/null | awk '{print "  - " $9 "（" $5 " 字节）"}' || echo "  - 无"
+            find . -maxdepth 1 -name 'FreeRoute*.ipa' -printf '  - %f（%s 字节）\n' | sed 's|^\./||' ; [ -n "$(find . -maxdepth 1 -name 'FreeRoute*.ipa' -print -quit)" ] || echo "  - 无"
             echo
             echo "**如实说明**：未签名 IPA 不能直接安装。免费 Apple ID 的 7 天有效期、可安装数量、"
             echo "以及 App Groups / Live Activity 能力限制均由 Apple 决定，本项目不做任何保证；"
