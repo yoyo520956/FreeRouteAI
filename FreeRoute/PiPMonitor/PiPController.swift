@@ -274,19 +274,38 @@ final class PictureInPictureDelegate: NSObject, AVPictureInPictureControllerDele
     static let shared = PictureInPictureDelegate()
     var onStop: (() -> Void)?
 
-    // ContentSource 用 sample-buffer 模式时必须给 playbackDelegate；
-    // 监控画面是「一直在动的实时画面」，所以对外表现为持续播放、无进度可拖。
+    // MARK: AVPictureInPictureSampleBufferPlaybackDelegate
+    // 下面 4 个签名的 label 完全按 Xcode 26.6 note 里
+    // 「protocol requires function ... with type ...」逐字实现；
+    // 之前按 Obj-C 文档猜的 transitionTo PlaybackState / IsPlaybackPaused 在本 SDK 上都不存在。
+
+    /// 监控画面是持续更新的实时画面：对外表现为无限区间、不可拖动
     func pictureInPictureControllerTimeRangeForPlayback(_ pictureInPictureController: AVPictureInPictureController) -> CMTimeRange {
         CMTimeRange(start: .zero, duration: .positiveInfinity)
     }
 
-    func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
-        false
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController,
+                                    setPlaying playing: Bool) {
+        // 我们没有真实播放队列，播放/暂停按钮只做视觉反馈，无需改变帧注入
+    }
+
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController,
+                                    didTransitionToRenderSize newRenderSize: CMVideoDimensions) {
+        // 渲染尺寸变化时无需处理：帧尺寸由 PiPController.frameSize 固定
+    }
+
+    func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController,
+                                    skipByInterval skipInterval: CMTime,
+                                    completion completionHandler: @escaping @Sendable () -> Void) {
+        // 不支持快进/快退，直接回调完成
+        completionHandler()
     }
 
     func pictureInPictureControllerShouldProhibitBackgroundAudioPlayback(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
         false
     }
+
+    // MARK: AVPictureInPictureControllerDelegate
 
     func pictureInPictureControllerDidStopPictureInPicture(_ pictureInPictureController: AVPictureInPictureController) {
         onStop?()
