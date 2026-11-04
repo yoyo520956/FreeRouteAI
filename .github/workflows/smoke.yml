@@ -1,0 +1,16 @@
+name: Smoke (Linux)
+
+# 诊断用：证明本仓库 Actions 与账号权限正常，问题只在 macOS Runner 容量。
+on:
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          echo "Actions 调度正常：$(date -u +'%F %T UTC')"
+          echo "checkout 文件数：$(git ls-files | wc -l)"
+          python3 tools/selfcheck.py | tail -3
