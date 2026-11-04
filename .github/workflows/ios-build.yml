@@ -117,17 +117,7 @@ jobs:
       - name: 选择模拟器（Runner 无 SE3，按可用机型回退）
         id: sim
         if: always()
-        run: |
-          xcrun simctl list devices available > /tmp/sims.txt 2>/dev/null || true
-          for CAND in "iPhone SE (3rd generation)" "iPhone SE (2nd generation)" "iPhone 16e" "iPhone 17e" "iPhone Air" "iPhone 17"; do
-            if grep -qF "$CAND" /tmp/sims.txt; then NAME="$CAND"; break; fi
-          done
-          NAME="${NAME:-$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]*' | head -1 | xargs)}"
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          {
-            echo "本次测试机型：**$NAME**"
-            echo "$NAME" | grep -q "SE" || echo "⚠️ 该机型不是 iPhone SE 3，截图尺寸不代表 SE 3（750×1334）。"
-          } >> "$GITHUB_STEP_SUMMARY"
+        run: python3 tools/pick-simulator.py
       - name: 步骤 6 · 单元测试
         id: unit
         if: success() && steps.simbuild.outcome == 'success'
@@ -135,7 +125,7 @@ jobs:
           set -o pipefail
           xcodebuild test \
             -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            -destination "id=${{ steps.sim.outputs.ud }}" \
             -only-testing:FreeRouteTests \
             -derivedDataPath "$DERIVED" \
             -enableCodeCoverage YES \
@@ -149,7 +139,7 @@ jobs:
           set -o pipefail
           xcodebuild test \
             -project "$PROJECT" -scheme "$SCHEME" \
-            -destination "platform=iOS Simulator,name=${{ steps.sim.outputs.name }}" \
+            -destination "id=${{ steps.sim.outputs.ud }}" \
             -only-testing:FreeRouteUITests \
             -derivedDataPath "$DERIVED" \
             -resultBundlePath UITests.xcresult \
