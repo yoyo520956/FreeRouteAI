@@ -93,6 +93,12 @@ jobs:
       # ── 步骤 4–5：工程生成与编译 ──
       - name: 安装 xcodegen
         run: brew install xcodegen
+      - name: 步骤 3.5 · 静态自检（几分钟内暴露低级错误，省排队）
+        run: |
+          python3 tools/selfcheck.py
+          python3 tools/check-callsites.py
+          python3 tools/check-members.py
+
       - name: 步骤 4 · 依赖解析（零第三方依赖，仅生成工程）
         run: |
           xcodegen generate
