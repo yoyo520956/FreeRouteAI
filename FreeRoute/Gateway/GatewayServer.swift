@@ -249,18 +249,34 @@ public final class GatewayServer: @unchecked Sendable {
 
     // MARK: 连接处理
 
+    /// NWEndpoint / NWHostAddress 都不保证有 description，逐层 pattern match 取主机
+    private static func hostName(of endpoint: NWEndpoint) -> String? {
+        guard case let .hostPort(host, _) = endpoint else { return nil }
+        switch host {
+        case let .name(n):
+            return n
+        case let .address(addr):
+            // NWHostAddress 只有 ipv4 / ipv6 两个载荷，IPv4Address/IPv6Address 有 description
+            if case let .ipv4(v4) = addr { return v4.description }
+            if case let .ipv6(v6) = addr { return v6.description }
+            return nil
+        @unknown default:
+            return nil
+        }
+    }
+
+    private func isLoopback(_ endpoint: NWEndpoint) -> Bool {
+        guard let h = Self.hostName(of: endpoint) else { return false }
+        return h == "localhost" || h == "::1" || h.hasPrefix("127.")
+    }
+
     private func accept(_ conn: NWConnection) {
         // 局域网关闭时只服务回环。NWListener 不支持只绑 127.0.0.1，
         // 因此在拿到对端地址后判断，非回环一律立即断开 ——
         // 这是「LAN 默认关闭 / 不允许未授权访问」这条需求的实际执行点。
-        if !isLANEnabled() {
-            let peer = conn.endpoint.description
-            let loopback = peer.hasPrefix("127.") || peer.contains("[::1]") || peer.contains("::1]")
-                || peer.hasPrefix("localhost")
-            if !loopback {
-                conn.cancel()
-                return
-            }
+        if !isLANEnabled(), !isLoopback(conn.endpoint) {
+            conn.cancel()
+            return
         }
         stateQueue.sync { connections[ObjectIdentifier(conn)] = conn }
         conn.start(queue: stateQueue)
