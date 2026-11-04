@@ -98,6 +98,7 @@ jobs:
           python3 tools/selfcheck.py
           python3 tools/check-callsites.py
           python3 tools/check-members.py
+          python3 tools/check-project.py
 
       - name: 步骤 4 · 依赖解析（零第三方依赖，仅生成工程）
         run: |

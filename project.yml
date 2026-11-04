@@ -19,9 +19,9 @@ targets:
     type: application
     platform: iOS
     sources:
+      # 注意：不要再加 excludes: ["**/.*"]。CI 实测这样会让 XcodeGen 给这个
+      # target 收录 0 个源文件（App 因此不产主程序，Archive 却是 SUCCEEDED）。
       - path: FreeRoute
-        excludes:
-          - "**/.*"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.freeroute.ai
