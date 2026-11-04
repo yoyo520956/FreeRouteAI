@@ -7,6 +7,7 @@ BUILD SUCCEEDED / ARCHIVE SUCCEEDED，导出的 IPA 里却没有主程序。
 这个检查让它在推送前就暴露。
 """
 import os
+import re
 import sys
 import glob
 
@@ -43,9 +44,22 @@ def main():
             if isinstance(src, dict) and src.get('excludes'):
                 problems.append(f"{name}: {path} 带 excludes={src['excludes']} —— XcodeGen 的 "
                                 f"glob 可能因此收录 0 个文件，禁止使用（已在 CI 踩过）")
-        expect_sources = not ttype.startswith('bundle.') or True
-        if total == 0 and expect_sources:
+        if total == 0:
             problems.append(f"{name}: 该 target 一个源文件都没有（type={ttype}）")
+
+    # 项目级 settings 必须是顶层键；写在 options 下会被 XcodeGen 静默忽略，
+    # 于是 CURRENT_PROJECT_VERSION 等未定义，Info.plist 的 $(…) 解析为空
+    opts = spec.get('options') or {}
+    if 'settings' in opts:
+        problems.append("options.settings 无效：项目级设置必须是顶层 settings（XcodeGen 会静默忽略，已踩过）")
+    base = ((spec.get('settings') or {}).get('base') or {})
+    used = set()
+    for rel in ['FreeRoute/Info.plist', 'FreeRouteWidget/Info.plist']:
+        if os.path.exists(rel):
+            used |= set(re.findall(r'\$\((CURRENT_PROJECT_VERSION|MARKETING_VERSION)\)',
+                                   open(rel, encoding='utf-8').read()))
+    for key in sorted(used - set(base)):
+        problems.append(f"Info.plist 引用了 $({key})，但项目级 settings.base 未定义 → 产物会缺对应键")
     print()
     for p in problems:
         print("  ✗", p)
