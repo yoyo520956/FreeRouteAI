@@ -115,7 +115,10 @@ public struct BackupService: Sendable {
         data.prefix(4) == Data("FRB1".utf8)
     }
 
-    /// 导入（写回数据库；Key 明文不会被覆盖，除非备份里包含）
+    /// 导入（写回数据库；Key 明文不会被覆盖，除非备份里包含）。
+    /// ModelStore 是 @MainActor（SwiftData mainContext 如此），写库必须回主 actor；
+    /// 调用点本来就在 SwiftUI 视图里，加标记即可，无需 await。
+    @MainActor
     public func restore(_ data: Data, into app: AppState) throws -> ImportReport {
         let dec = JSONDecoder()
         dec.dateDecodingStrategy = .iso8601
