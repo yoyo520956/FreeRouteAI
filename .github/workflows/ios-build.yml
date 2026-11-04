@@ -185,7 +185,8 @@ jobs:
         run: |
           set -o pipefail
           echo "--- 宿主注入实测值（测试解析不到模块时先看这里）---"
-          xcodebuild -project "$PROJECT" -target FreeRouteTests -showBuildSettings 2>/dev/null \
+          xcodebuild -project "$PROJECT" -target FreeRouteTests -showBuildSettings \
+            -destination "id=${{ steps.sim.outputs.ud }}" 2>/dev/null \
             | grep -E "TEST_HOST|BUNDLE_LOADER|ENABLE_TESTABILITY|PRODUCT_MODULE_NAME" || true
           xcodebuild test \
             -project "$PROJECT" -scheme "$SCHEME" \

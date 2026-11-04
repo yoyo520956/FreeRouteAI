@@ -96,6 +96,10 @@ schemes:
     build:
       targets:
         FreeRoute: all
+        # 测试 target 必须进 scheme 的 build 段，否则 xcodebuild test 报
+        # Unable to resolve module dependency: 'FreeRoute'（CI 实测踩过）
+        FreeRouteTests: [test]
+        FreeRouteUITests: [test]
     run:
       config: Debug
       environmentVariables:
