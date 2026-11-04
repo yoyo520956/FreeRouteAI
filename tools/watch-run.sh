@@ -12,6 +12,8 @@ for i in $(seq 1 14); do
     rg -o '[^ /]+\.swift:[0-9]+:[0-9]+: error: .{0,140}' /tmp/f.log | sort -u | head -25
     echo "=== 关键节点 ==="
     rg '主程序：|缺少主程序|Executed [0-9]+ test|Test Suite .*(passed|failed)|ARCHIVE SUCCEEDED|EXPORT|Testing failed' /tmp/f.log | sed 's/^[0-9T:.Z-]*Z //' | cut -c1-110 | sort -u | head -14
+    echo "=== 协议 conformance 要求（note 给出精确签名，照抄即可）==="
+    rg -o "protocol requires function '[^']*' with type '.{0,90}" /tmp/f.log | sort -u | head -8
     exit 0
   fi
 done
