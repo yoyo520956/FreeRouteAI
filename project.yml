@@ -17,6 +17,7 @@ options:
 targets:
   FreeRoute:
     type: application
+    platform: iOS
     sources:
       - path: FreeRoute
         excludes:
@@ -41,6 +42,7 @@ targets:
 
   FreeRouteWidget:
     type: app-extension
+    platform: iOS
     sources:
       - path: FreeRouteWidget
       - path: FreeRoute/LiveActivity
@@ -59,6 +61,7 @@ targets:
 
   FreeRouteTests:
     type: bundle.unit-test
+    platform: iOS
     sources:
       - path: FreeRouteTests
     settings:
@@ -70,6 +73,7 @@ targets:
 
   FreeRouteUITests:
     type: bundle.ui-testing
+    platform: iOS
     sources:
       - path: FreeRouteUITests
     settings:
