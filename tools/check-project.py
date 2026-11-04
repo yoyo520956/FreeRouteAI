@@ -10,7 +10,12 @@ import os
 import sys
 import glob
 
-import yaml
+try:
+    import yaml
+except ModuleNotFoundError:
+    print('跳过：本机/Runner 没有 PyYAML（此检查降级为不执行，' 
+          'Archive 阶段的主程序硬校验仍是真正的门）')
+    raise SystemExit(0)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
