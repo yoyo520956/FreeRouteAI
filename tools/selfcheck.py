@@ -139,6 +139,10 @@ FORBIDDEN = [
     (r'(?<!\.)\bprint\s*\(', 'print 调试输出'),
     (r'#warning\(\)|#error\(\)', '#error/#warning'),
     (r'placeholder|notImplemented|coming soon|敬请期待|待实现', '占位实现'),
+    # try? 覆盖整个后缀链 → flatMap 落在 Data 上，$0 是 UInt8，String(data:) 编译不过
+    (r'try\?\s*[^\n{]*\.flatMap\s*\{\s*String\(data:', 'try? 内对 Data 用 flatMap（$0 是字节）'),
+    # Optional 没有 .value，必须 ?.value
+    (r'\(try\?[^\n]*\)\.value\b', 'Optional 直接取 .value（应为 ?.value）'),
 ]
 
 def main():

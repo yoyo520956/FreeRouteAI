@@ -25,9 +25,10 @@ public final class ModelStore {
         var desc = FetchDescriptor<DBProvider>(predicate: #Predicate { $0.id == id })
         desc.fetchLimit = 1
         if let existing = try context.fetch(desc).first {
-            if let d = try? JSONEncoder().encode(p.keys), let s = String(data: d, encoding: .utf8) { existing.keysJSON = s
- }
-            existing.freeQuotaJSON = (try? JSONEncoder().encode(quota(p))).flatMap { String(data: $0, encoding: .utf8) }
+            existing.keysJSON = jsonString(p.keys) ?? "[]"
+            existing.customHeadersJSON = jsonString(fromObject: p.customHeaders) ?? "{}"
+            existing.freeQuotaJSON = jsonString(AnyCodableQuota(value: p.freeQuota))
+            existing.updatedAt = Date()
             existing.name = p.name
             existing.baseURL = p.baseURL
             existing.protocolRaw = p.protocolType.rawValue
@@ -55,12 +56,6 @@ public final class ModelStore {
         for m in try context.fetch(desc) { context.delete(m) }
         var pdesc = FetchDescriptor<DBProvider>(predicate: #Predicate { $0.id == id2 })
         for p in try context.fetch(pdesc) { context.delete(p) }
-    }
-
-    private func quota(_ p: Provider) -> FreeQuotaInfo {
-        p.freeQuota ?? FreeQuotaInfo(hasFreeTier: false, quotaNote: "未登记", rateLimitNote: "未登记",
-                                     regionNote: "未登记", registrationNote: "未登记", accountNote: "未登记",
-                                     freeModelsNote: "未登记", lastVerifiedISO: "")
     }
 
     // MARK: Model

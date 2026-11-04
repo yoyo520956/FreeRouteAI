@@ -1,6 +1,22 @@
 import Foundation
 import SwiftData
 
+// MARK: - JSON 文本辅助
+// 注意：不能写 `try? encoder.encode(x).flatMap { String(data: $0, ...) }`——
+// 那样 flatMap 落在 Data（Collection）上，$0 是 UInt8 而不是 Data，编译不过。
+
+/// 编码为 JSON 文本，失败返回 nil
+func jsonString<T: Encodable>(_ value: T) -> String? {
+    guard let d = try? JSONEncoder().encode(value) else { return nil }
+    return String(data: d, encoding: .utf8)
+}
+
+/// 任意 JSON 对象转文本（用于 [String: String] 这类不需要 Codable 容器的场景）
+func jsonString(fromObject obj: Any) -> String? {
+    guard let d = try? JSONSerialization.data(withJSONObject: obj) else { return nil }
+    return String(data: d, encoding: .utf8)
+}
+
 // MARK: - SwiftData 实体（持久层；Key 明文不入库）
 
 @Model
@@ -31,12 +47,12 @@ public final class DBProvider {
         self.requestPath = provider.requestPath
         self.modelsPath = provider.modelsPath
         self.embeddingsPath = provider.embeddingsPath
-        self.customHeadersJSON = (try? JSONSerialization.data(withJSONObject: provider.customHeaders).flatMap { String(data: $0, encoding: .utf8) }) ?? "{}"
+        self.customHeadersJSON = jsonString(fromObject: provider.customHeaders) ?? "{}"
         self.timeout = provider.timeout
-        self.keysJSON = (try? JSONEncoder().encode(provider.keys).flatMap { String(data: $0, encoding: .utf8) }) ?? "[]"
+        self.keysJSON = jsonString(provider.keys) ?? "[]"
         self.enabled = provider.enabled
         self.notes = provider.notes
-        self.freeQuotaJSON = (try? JSONEncoder().encode(provider.freeQuota ?? AnyCodableQuota.none).flatMap { String(data: $0, encoding: .utf8) })
+        self.freeQuotaJSON = jsonString(AnyCodableQuota(value: provider.freeQuota))
         self.createdAt = Date()
         self.updatedAt = Date()
     }
@@ -52,7 +68,7 @@ public final class DBProvider {
         }
         var quota: FreeQuotaInfo?
         if let q = freeQuotaJSON, let d = q.data(using: .utf8) {
-            quota = (try? JSONDecoder().decode(AnyCodableQuota.self, from: d)).value
+            quota = (try? JSONDecoder().decode(AnyCodableQuota.self, from: d))?.value
         }
         return Provider(
             id: id,
