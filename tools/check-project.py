@@ -60,6 +60,20 @@ def main():
                                    open(rel, encoding='utf-8').read()))
     for key in sorted(used - set(base)):
         problems.append(f"Info.plist 引用了 $({key})，但项目级 settings.base 未定义 → 产物会缺对应键")
+    # 手写 Info.plist（INFOPLIST_FILE）必须自带 installd 要求的键。
+    # 这些错只在安装阶段暴露（CI 踩过：widget 缺 CFBundleExecutable → 装不上）
+    REQUIRED = ['CFBundleExecutable', 'CFBundleIdentifier', 'CFBundleName',
+                'CFBundleShortVersionString', 'CFBundleVersion']
+    for name, t in (spec.get('targets') or {}).items():
+        rel = ((t.get('settings') or {}).get('base') or {}).get('INFOPLIST_FILE')
+        if not rel or not os.path.exists(rel):
+            if rel:
+                problems.append(f"{name}: INFOPLIST_FILE 指向不存在的 {rel}")
+            continue
+        txt = open(rel, encoding='utf-8').read()
+        for key in REQUIRED:
+            if f'<key>{key}</key>' not in txt:
+                problems.append(f"{name}: {rel} 缺 <key>{key}</key>（安装阶段会失败）")
     print()
     for p in problems:
         print("  ✗", p)
