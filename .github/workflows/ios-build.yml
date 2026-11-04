@@ -11,6 +11,12 @@ name: iOS Build
 on:
   workflow_dispatch:
     inputs:
+      runner_image:
+        description: "Runner 镜像（macOS 容量池按镜像分，排队久就换一个）"
+        type: choice
+        required: false
+        default: "macos-26"
+        options: ["macos-26", "macos-15", "macos-14"]
       xcode:
         description: "Xcode 版本（必须是 Runner 已预装的版本）"
         required: true
@@ -30,9 +36,10 @@ on:
     branches: [main]
   pull_request:
 
+# 按「分支 + 镜像」分组：容量紧张时可同时向多个镜像排队，且不再互相取消
 concurrency:
-  group: freeroute-build
-  cancel-in-progress: true
+  group: freeroute-${{ github.ref }}-${{ github.event.inputs.runner_image }}
+  cancel-in-progress: false
 
 env:
   SCHEME: FreeRoute
@@ -42,7 +49,7 @@ env:
 jobs:
   build:
     name: 环境核查 · 编译 · 测试 · Archive
-    runs-on: macos-26
+    runs-on: ${{ github.event.inputs.runner_image || 'macos-26' }}
     timeout-minutes: 45
     env:
       SIGNING: ${{ github.event.inputs.signing }}
