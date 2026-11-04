@@ -44,7 +44,7 @@ struct FRMonitorLiveActivity: Widget {
                         Text(context.state.streaming ? "正在接收流式响应" : "空闲")
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                         Spacer()
-                        Text(context.gatewayURL).font(.system(size: 9, design: .monospaced))
+                        Text(context.activity.attributes.gatewayURL).font(.system(size: 9, design: .monospaced))
                             .foregroundStyle(.tertiary).lineLimit(1)
                     }
                     .padding(.horizontal, 2)
