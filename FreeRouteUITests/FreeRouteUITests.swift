@@ -26,15 +26,12 @@ final class FreeRouteUITests: XCTestCase {
 
     private func shot(_ name: String) {
         let screenshot = XCUIScreen.main.screenshot()
+        // XCTAttachment 只有 name（没有 title）；XCUIApplication 也没有写沙盒的 API，
+        // 所以截图只走附件通道，由 tools/collect-screenshots.py 从 .xcresult 导出。
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
-        attachment.title = name
         attachment.lifetime = .keepAlways
         add(attachment)
-        // 同时把 PNG 落到 App 沙盒 tmp/screenshots，CI 可直接取走
-        if let data = screenshot.pngRepresentation as Data? {
-            app.write(data, to: "screenshots/\(name).png", ofType: "png")
-        }
     }
 
     private func tab(_ title: String) {

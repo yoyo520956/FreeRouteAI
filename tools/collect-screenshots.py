@@ -45,7 +45,12 @@ def from_xcresult(path="UITests.xcresult"):
     got = 0
     for item in items:
         title = item.get("title") or item.get("name") or ""
-        filename = item.get("suggestedFileName") or (item.get("payload") or {}).get("suggestedFileName") or ""
+        # xcresulttool 的 manifest 字段跨版本不一致，逐个兼容
+        filename = (item.get("filename")
+                    or item.get("suggestedFileName")
+                    or (item.get("payload") or {}).get("suggestedFileName")
+                    or (item.get("payload") or {}).get("filename")
+                    or "")
         if not filename:
             continue
         src = os.path.join(raw, filename)
