@@ -284,6 +284,12 @@ final class PictureInPictureDelegate: NSObject, AVPictureInPictureControllerDele
         CMTimeRange(start: .zero, duration: .positiveInfinity)
     }
 
+    /// 协议必需成员（run 41917673883 note：pictureInPictureControllerIsPlaybackPaused）。
+    /// 帧注入一直在跑，因此始终报告「未暂停」。
+    func pictureInPictureControllerIsPlaybackPaused(_ pictureInPictureController: AVPictureInPictureController) -> Bool {
+        false
+    }
+
     func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController,
                                     setPlaying playing: Bool) {
         // 我们没有真实播放队列，播放/暂停按钮只做视觉反馈，无需改变帧注入
