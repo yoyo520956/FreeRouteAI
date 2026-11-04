@@ -91,6 +91,7 @@ jobs:
           xcodegen generate
           xcodebuild -list -project "$PROJECT"
       - name: 步骤 5 · 编译（iOS 模拟器，不签名）
+        id: simbuild
         run: |
           set -o pipefail
           xcodebuild build \
@@ -115,7 +116,8 @@ jobs:
             echo "$NAME" | grep -q "SE" || echo "⚠️ 该机型不是 iPhone SE 3，截图尺寸不代表 SE 3（750×1334）。"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: 步骤 6 · 单元测试
-        if: always() && steps.'步骤 5 · 编译（iOS 模拟器，不签名）'.outcome == 'success'
+        id: unit
+        if: success() && steps.simbuild.outcome == 'success'
         run: |
           set -o pipefail
           xcodebuild test \
@@ -127,7 +129,8 @@ jobs:
             -resultBundlePath UnitTests.xcresult \
             CODE_SIGNING_ALLOWED=NO
       - name: 步骤 7 · UI 测试（逐屏截图）
-        if: steps.'步骤 6 · 单元测试'.outcome == 'success' && github.event.inputs.run_ui_tests != 'false'
+        id: uitest
+        if: success() && steps.unit.outcome == 'success' && github.event.inputs.run_ui_tests != 'false'
         continue-on-error: true
         run: |
           set -o pipefail
@@ -182,7 +185,8 @@ jobs:
           echo "CODE_SIGN_ARGS=-allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=Apple Development CODE_SIGNING_ALLOWED=YES" >> "$GITHUB_ENV"
 
       - name: 步骤 8 · Archive（Release，真机 arm64）
-        if: steps.'步骤 5 · 编译（iOS 模拟器，不签名）'.outcome == 'success'
+        id: archive
+        if: success() && steps.simbuild.outcome == 'success'
         run: |
           xcodegen generate
           # shellcheck disable=SC2086
@@ -193,7 +197,7 @@ jobs:
             -configuration Release \
             $CODE_SIGN_ARGS
       - name: 步骤 9 · 导出 IPA
-        if: steps.'步骤 8 · Archive（Release，真机 arm64）'.outcome == 'success'
+        if: success() && steps.archive.outcome == 'success'
         run: |
           python3 tools/make-export-options.py "${SIGNING:-none}"
           if [ "${SIGNING:-none}" = "none" ]; then
