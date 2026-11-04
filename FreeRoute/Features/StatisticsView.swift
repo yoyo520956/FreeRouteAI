@@ -6,12 +6,12 @@ struct StatisticsView: View {
     @Environment(AppState.self) private var app
 
     var body: some View {
-        @Bindable var stats = app.statistics
             ZStack {
                 FRBackground()
                 ScrollView {
                     VStack(spacing: 12) {
-                        rangeCard($stats)
+                        rangeCard(.init(get: { app.statistics.rangeDays },
+                                        set: { app.statistics.rangeDays = $0 }))
                         metricsSection
                         dailyRequestsCard
                         successRateCard
