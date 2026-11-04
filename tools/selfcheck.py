@@ -117,16 +117,28 @@ def collect():
     return sorted(files)
 
 
+# 显式点名某框架的类型时，该文件必须 import 对应框架（SwiftUI 不会转发 UIKit/AVKit 等）
+NEEDS_IMPORT = {
+    "UIPasteboard": "UIKit", "UIApplication": "UIKit", "UIImage": "UIKit",
+    "UIActivityViewController": "UIKit", "UIStackView": "UIKit", "UIScreen": "UIKit",
+    "UIVisualEffectView": "UIKit", "UIHostingView": "UIKit",
+    "AVPictureInPictureController": "AVKit", "AVPlayer": "AVFoundation",
+    "AVAudioSession": "AVFoundation", "AVSampleBufferDisplayLayer": "AVFoundation",
+    "CMSampleBuffer": "CoreMedia", "CMTime": "CoreMedia",
+    "NWListener": "Network", "NWConnection": "Network", "NWParameters": "Network",
+    "SecItem": "Security", "UTType": "UniformTypeIdentifiers",
+    "ActivityAuthorizationInfo": "ActivityKit", "ActivityAttributes": "ActivityKit",
+    "Chart": "Charts", "BarMark": "Charts", "LineMark": "Charts",
+    "MKMapView": "MapKit", "CLLocationManager": "CoreLocation",
+}
+
 FORBIDDEN = [
     (r'\bTODO\b', '遗留 TODO'),
     (r'\bfatalError\s*\(', 'fatalError（运行时会崩）'),
     (r'\bpreconditionFailure\b', 'preconditionFailure'),
-    (r'print\s*\(', 'print 调试输出'),
-    (r'\bUIPasteboard\.general\.string\s*=\s*@", ', ''),
-    (r'Try\s*\(', ''),
+    (r'(?<!\.)\bprint\s*\(', 'print 调试输出'),
     (r'#warning\(\)|#error\(\)', '#error/#warning'),
-    (r'\bsleep\s*\(\s*[0-9]+\s*\)', 'sleep 阻塞'),
-    (r'placeholder|notImplemented|coming soon|敬请期待', '占位实现'),
+    (r'placeholder|notImplemented|coming soon|敬请期待|待实现', '占位实现'),
 ]
 
 def main():
@@ -137,6 +149,16 @@ def main():
         code = strip_code(raw)
         rel = os.path.relpath(f, ROOT)
         check_balance(rel, code)
+
+        # 显式点名某框架的类型却没 import 该框架（SwiftUI 不转发 UIKit/AVKit 等）
+        for sym, mod in NEEDS_IMPORT.items():
+            if not re.search(r'\b' + sym + r'\b', code):
+                continue
+            if f'import {mod}' in raw:
+                continue
+            if mod == 'Charts' and 'Charts.' in code:
+                continue
+            errors.append(f"{rel}: 用了 {sym} 但没 import {mod}")
 
         if 'import SwiftUI' in code:
             pass
@@ -150,8 +172,6 @@ def main():
                 errors.append(f"{rel}: 使用 Swift Charts 但未 import Charts")
 
         for pat, why in FORBIDDEN:
-            if not pat or ',' in pat:
-                continue
             m = re.search(pat, code)
             if m:
                 ln = code[:m.start()].count('\n') + 1

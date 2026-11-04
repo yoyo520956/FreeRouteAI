@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 本地 / 局域网网关：启停、地址、端口、鉴权 Token、接口清单
 struct GatewayView: View {
