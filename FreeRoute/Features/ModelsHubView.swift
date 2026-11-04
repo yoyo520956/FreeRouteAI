@@ -84,6 +84,10 @@ struct ModelsHubView: View {
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }
+                    // UI 测试定位点：SF Symbol 按钮的默认可访问性标签不稳定，
+                    // 用显式 identifier（同时给读屏用户一个真实名称）
+                    .accessibilityIdentifier("moreActions")
+                    .accessibilityLabel("更多操作")
                     .disabled(refreshing)
                 }
             }

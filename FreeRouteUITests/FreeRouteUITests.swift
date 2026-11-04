@@ -115,9 +115,9 @@ final class FreeRouteUITests: XCTestCase {
 
     func testAddCustomProviderAppearsInList() throws {
         tab("模型")
-        let more = app.buttons["ellipsis.circle"]
+        let more = app.buttons["moreActions"]
         guard more.waitForExistence(timeout: 8) else {
-            XCTFail("模型中心工具栏不可用")
+            XCTFail("模型中心工具栏不可用（找不到 moreActions）")
             return
         }
         more.tap()
