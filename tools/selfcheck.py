@@ -145,9 +145,9 @@ FORBIDDEN = [
     (r'\(try\?[^\n]*\)\.value\b', 'Optional 直接取 .value（应为 ?.value）'),
 ]
 
-# ActivityViewContext 只有这几个成员；直接写 context.字段名 是常见错误
-ACTIVITY_CTX_ALLOWED = {'state', 'activity', 'date', 'timing', 'inActivityContext',
-                        'compactLeading', 'compactTrailing', 'center'}
+# ActivityViewContext 的可用成员（Xcode 26.6 SDK 实测：没有 activity，
+# 想要固定属性请放进 ContentState，别写 context.activity.attributes.x）
+ACTIVITY_CTX_ALLOWED = {'state', 'date', 'timing', 'inActivityContext'}
 
 
 def main():
@@ -164,7 +164,7 @@ def main():
             for cm_ in re.finditer(r'\bcontext\.([a-z]\w*)', code):
                 if cm_.group(1) not in ACTIVITY_CTX_ALLOWED:
                     errors.append(f"{rel}: context.{cm_.group(1)} 不是 ActivityViewContext 的成员"
-                                  f"（固定属性应写 context.activity.attributes.{cm_.group(1)}）")
+                                  f"（要显示的数据请放进 ContentState，用 context.state.{cm_.group(1)} 取）")
 
         # 显式点名某框架的类型却没 import 该框架（SwiftUI 不转发 UIKit/AVKit 等）
         for sym, mod in NEEDS_IMPORT.items():

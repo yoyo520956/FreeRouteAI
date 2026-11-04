@@ -16,22 +16,21 @@ public struct FRMonitorAttributes: ActivityAttributes {
         public var gatewayRunning: Bool
         /// 更新时间
         public var updatedAt: Date
+        /// 网关地址。放在 ContentState 而不是固定属性里：
+        /// DynamicIsland 闭包给的 ActivityViewContext 只保证有 .state，
+        /// 取固定属性要走 context.activity.attributes，实测该 SDK 上没有 activity 成员。
+        public var gatewayURL: String
 
         public init(model: String, tokens: Int, tokensPerSecond: Double,
-                    streaming: Bool, gatewayRunning: Bool, updatedAt: Date = Date()) {
+                    streaming: Bool, gatewayRunning: Bool, updatedAt: Date = Date(),
+                    gatewayURL: String = "http://127.0.0.1:3000") {
             self.model = model
             self.tokens = tokens
             self.tokensPerSecond = tokensPerSecond
             self.streaming = streaming
             self.gatewayRunning = gatewayRunning
             self.updatedAt = updatedAt
+            self.gatewayURL = gatewayURL
         }
-    }
-
-    /// 固定属性：网关地址
-    public var gatewayURL: String
-
-    public init(gatewayURL: String) {
-        self.gatewayURL = gatewayURL
     }
 }

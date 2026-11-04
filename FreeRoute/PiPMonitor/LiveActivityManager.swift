@@ -36,12 +36,14 @@ public final class LiveActivityManager {
             return FRMonitorAttributes.ContentState(model: "—", tokens: 0, tokensPerSecond: 0,
                                                     streaming: false, gatewayRunning: false)
         }
+        let st = app.gateway.status
         return FRMonitorAttributes.ContentState(
             model: app.monitor.currentModel,
             tokens: app.monitor.sessionTokens,
             tokensPerSecond: app.monitor.tokensPerSecond,
             streaming: app.monitor.isStreaming,
-            gatewayRunning: app.monitor.gatewayRunning
+            gatewayRunning: st.isRunning,
+            gatewayURL: (st.lanEnabled ? st.lanAddress : nil) ?? st.loopbackAddress
         )
     }
 
@@ -57,7 +59,7 @@ public final class LiveActivityManager {
             return
         }
         #endif
-        let attrs = FRMonitorAttributes(gatewayURL: app?.gateway.status.loopbackAddress ?? "http://127.0.0.1:3000")
+        let attrs = FRMonitorAttributes()
         do {
             let activity = try Activity.request(attributes: attrs,
                                                 content: .init(state: Self.state(from: app), staleDate: nil),
