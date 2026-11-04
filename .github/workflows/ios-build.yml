@@ -102,6 +102,13 @@ jobs:
       - name: 步骤 4 · 依赖解析（零第三方依赖，仅生成工程）
         run: |
           xcodegen generate
+          # 对照：磁盘上的 Swift 文件 vs 工程 Sources 阶段实际收录的文件。
+          # 若工程里明显少于磁盘，说明某个 target 的 sources 没吃到文件。
+          DISK=$(find FreeRoute FreeRouteWidget FreeRouteTests FreeRouteUITests -name '*.swift' | wc -l | tr -d ' ')
+          INPROJ=$(grep -c '\.swift in Sources' FreeRoute.xcodeproj/project.pbxproj || true)
+          echo "磁盘 Swift 文件：$DISK，工程 Sources 收录：$INPROJ"
+          [ "$INPROJ" -ge "$DISK" ] || echo "::warning::工程收录的 Swift 文件少于磁盘上的数量，检查 project.yml 的 sources"
+
           xcodebuild -list -project "$PROJECT"
       - name: 步骤 5 · 编译（iOS 模拟器，不签名）
         id: simbuild
@@ -157,7 +164,18 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/FreeRoute.xcarchive" \
             -configuration Release \
+            -derivedDataPath "$DERIVED" \
             $CODE_SIGN_ARGS
+          # 上一轮出过「Archive SUCCEEDED 但 .app 里没有主程序」的假成功，
+          # 这里硬校验，宁可报错也不要把空壳打进 IPA
+          APP="$RUNNER_TEMP/FreeRoute.xcarchive/Products/Applications/FreeRoute.app"
+          echo "--- Archive 产物清单 ---"
+          find "$RUNNER_TEMP/FreeRoute.xcarchive/Products" -type f | sed "s|$APP|.|" | head -30
+          if [ ! -f "$APP/FreeRoute" ]; then
+            echo "::error::Archive 产物缺少主程序 FreeRoute.app/FreeRoute（App target 未产出可执行文件）"
+            exit 1
+          fi
+          echo "主程序：$(du -h "$APP/FreeRoute" | cut -f1)，扩展：$(du -sh "$APP/PlugIns" 2>/dev/null | cut -f1)"
       - name: 步骤 7 · 导出 IPA
         if: success() && steps.archive.outcome == 'success'
         run: |
