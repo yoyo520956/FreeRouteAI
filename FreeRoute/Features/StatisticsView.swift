@@ -7,7 +7,6 @@ struct StatisticsView: View {
 
     var body: some View {
         @Bindable var stats = app.statistics
-        NavigationStack {
             ZStack {
                 FRBackground()
                 ScrollView {
@@ -31,7 +30,6 @@ struct StatisticsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .task { app.statistics.reload() }
             .refreshable { app.statistics.reload() }
-        }
     }
 
     // MARK: - 时间范围

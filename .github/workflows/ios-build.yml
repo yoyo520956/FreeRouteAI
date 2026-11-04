@@ -2,13 +2,17 @@ name: iOS Build
 
 # FreeRoute AI / 自由路由 — 云端 macOS + Xcode 构建
 # GitHub Actions 只是构建环境；App 本体完全运行在 iPhone 上，不依赖任何云端服务。
-# 公开仓库使用 GitHub-hosted Runner 的 macOS 时长对公开仓库免费。
+# 公开仓库使用 GitHub-hosted Runner（含 macOS）对公开仓库免费。
+#
+# 为什么是「单个 job」：GitHub 注解过 "Due to capacity constraints, jobs targeting
+# macOS arm64 runners may experience longer queue times"，多 job 链一旦首个 job
+# 未拿到 Runner 被取消，后续 job 全部 skipped。单 job 只需一次调度机会。
 
 on:
   workflow_dispatch:
     inputs:
       xcode:
-        description: "Xcode 版本（必须是 Runner 已预装的版本，见 env-check 日志）"
+        description: "Xcode 版本（必须是 Runner 已预装的版本）"
         required: true
         default: "26.6"
       run_ui_tests:
@@ -17,7 +21,7 @@ on:
         required: false
         default: true
       signing:
-        description: "签名方式（none = 只验证编译打包链路）"
+        description: "签名方式（none = 只验证编译与打包链路）"
         type: choice
         required: false
         default: "none"
@@ -27,7 +31,7 @@ on:
   pull_request:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: freeroute-build
   cancel-in-progress: true
 
 env:
@@ -36,58 +40,50 @@ env:
   DERIVED: ${{ github.workspace }}/DerivedData
 
 jobs:
-  # ───────── 步骤 1–3：环境核查（如实报告 Xcode / Swift / SDK 版本）─────────
-  env-check:
-    name: 环境核查
+  build:
+    name: 环境核查 · 编译 · 测试 · Archive
     runs-on: macos-26
-    outputs:
-      xcode_path: ${{ steps.pick.outputs.path }}
+    timeout-minutes: 45
+    env:
+      SIGNING: ${{ github.event.inputs.signing }}
+      XCODE_PICK: ${{ github.event.inputs.xcode }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: 选择 Xcode
-        id: pick
+      # ── 步骤 1–3：环境核查（如实报告，不许猜）──
+      - name: 步骤 1 · 选择 Xcode
         run: |
-          X="${{ github.event.inputs.xcode || '26.6' }}"
+          X="${XCODE_PICK:-26.6}"
           if [ -d "/Applications/Xcode_${X}.app" ]; then
-            P="/Applications/Xcode_${X}.app/Contents/Developer"
+            echo "DEVELOPER_DIR=/Applications/Xcode_${X}.app/Contents/Developer" >> "$GITHUB_ENV"
+            echo "选用：Xcode ${X}"
           else
-            echo "⚠️ Runner 未预装 Xcode ${X}，回退到默认版本"
-            P="$(xcode-select -p)"
+            echo "⚠️ Runner 未预装 Xcode ${X}，使用默认版本：$(xcode-select -p)"
           fi
-          echo "path=$P" >> "$GITHUB_OUTPUT"
-          echo "DEVELOPER_DIR=$P" >> "$GITHUB_ENV"
       - name: 步骤 2 · Xcode 版本
         run: xcodebuild -version
-      - name: 步骤 3 · Swift 版本
-        run: swift --version
-      - name: Runner 已预装的 Xcode
-        run: ls /Applications | grep -i '^Xcode' || true
-      - name: 可用 iOS SDK
-        run: xcodebuild -showsdks | grep -i iphoneos || true
-      - name: SDK 现实核查（不偷换 SDK 假装成功）
+      - name: 步骤 3 · Swift 版本与可用 SDK
+        run: |
+          swift --version
+          xcodebuild -showsdks | grep -i iphoneos || true
+          ls /Applications | grep -i '^Xcode' || true
+      - name: SDK 现实核查（不偷换 SDK 假装达标）
+        if: always()
         run: |
           {
             echo "## SDK 现实核查"
             echo '```'
-            xcodebuild -version
-            xcodebuild -showsdks | grep -i iphoneos || true
+            xcodebuild -version 2>/dev/null
+            xcodebuild -showsdks 2>/dev/null | grep -i iphoneos || true
             echo '```'
-            echo "- 需求指定 iOS 27.3 beta 1 SDK：**GitHub 公开 Runner 未提供**。"
-            echo "- 主线镜像 \`macos-26\` 最高 Xcode 26.6（iOS 26.x SDK）；另有 Xcode 27 预览镜像（最高 iOS 27.2 SDK），其 Runner 标签需以 actions/runner-images 当时公告为准。"
-            echo "- 处理原则：不偷偷换成不兼容 SDK 冒充达标，也不虚报 beta SDK 构建成功；使用 Runner 提供的最新正式版 SDK 编译，最低部署目标保持 iOS 17.0。"
-            echo "- 需要 iOS 27.3 beta SDK 时：在 Secrets 提供 Apple ID，用 \`xcodes\` 安装官方 beta，并把本工作流的 Xcode 选择改成该版本。"
+            echo "- 需求指定 iOS 27.3 beta 1 SDK：**GitHub 公开 Runner 不提供**。"
+            echo "- \`macos-26\` 最高 Xcode 26.6（iOS 26.x SDK）；官方 Xcode 27 预览镜像最高 iOS 27.2。"
+            echo "- 处理原则：不用不兼容 SDK 冒充达标，也不虚报 beta 构建成功；用 Runner 最新正式版编译，最低部署目标保持 iOS 17.0。"
+            echo "- 模拟器机型说明：Runner 已不提供 iPhone SE (3rd generation)，截图不等于 SE 3 真机截图。"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ───────── 步骤 4–7：工程生成、编译、单元测试、UI 测试与截图 ─────────
-  build-test:
-    name: 编译与测试（模拟器 · 不签名）
-    runs-on: macos-26
-    needs: env-check
-    env:
-      DEVELOPER_DIR: ${{ needs.env-check.outputs.xcode_path }}
-    steps:
-      - uses: actions/checkout@v4
+      # ── 步骤 4–5：工程生成与编译 ──
       - name: 安装 xcodegen
         run: brew install xcodegen
       - name: 步骤 4 · 依赖解析（零第三方依赖，仅生成工程）
@@ -102,26 +98,24 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$DERIVED" \
             CODE_SIGNING_ALLOWED=NO
-      - name: 选择模拟器（Runner 已无 iPhone SE 3，按可用机型自动回退）
+
+      # ── 步骤 6–7：测试 ──
+      - name: 选择模拟器（Runner 无 SE3，按可用机型回退）
         id: sim
+        if: always()
         run: |
-          xcrun simctl list devices available > /tmp/sims.txt
+          xcrun simctl list devices available > /tmp/sims.txt 2>/dev/null || true
           for CAND in "iPhone SE (3rd generation)" "iPhone SE (2nd generation)" "iPhone 16e" "iPhone 17e" "iPhone Air" "iPhone 17"; do
             if grep -qF "$CAND" /tmp/sims.txt; then NAME="$CAND"; break; fi
           done
-          if [ -z "${NAME:-}" ]; then
-            NAME=$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]*' | head -1 | xargs)
-          fi
+          NAME="${NAME:-$(xcrun simctl list devices available | grep -Eo 'iPhone [^(]*' | head -1 | xargs)}"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           {
-            echo "本次测试机型：$NAME"
-            if ! echo "$NAME" | grep -q "SE"; then
-              echo "⚠️ GitHub Runner 的 Xcode 26/27 已不提供 iPhone SE (3rd generation) 模拟器，"
-              echo "   因此 CI 截图不是 SE 3 的 4.7 寸尺寸；SE 3 适配需真机验证（见 docs/交付清单与已知限制.md）。"
-            fi
+            echo "本次测试机型：**$NAME**"
+            echo "$NAME" | grep -q "SE" || echo "⚠️ 该机型不是 iPhone SE 3，截图尺寸不代表 SE 3（750×1334）。"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "使用模拟器：$NAME"
       - name: 步骤 6 · 单元测试
+        if: always() && steps.'步骤 5 · 编译（iOS 模拟器，不签名）'.outcome == 'success'
         run: |
           set -o pipefail
           xcodebuild test \
@@ -132,15 +126,8 @@ jobs:
             -enableCodeCoverage YES \
             -resultBundlePath UnitTests.xcresult \
             CODE_SIGNING_ALLOWED=NO
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: unit-tests-xcresult
-          path: UnitTests.xcresult
-          if-no-files-found: ignore
-
-      - name: 步骤 7 · UI 测试（含逐屏截图）
-        if: ${{ github.event.inputs.run_ui_tests != 'false' }}
+      - name: 步骤 7 · UI 测试（逐屏截图）
+        if: steps.'步骤 6 · 单元测试'.outcome == 'success' && github.event.inputs.run_ui_tests != 'false'
         continue-on-error: true
         run: |
           set -o pipefail
@@ -151,66 +138,31 @@ jobs:
             -derivedDataPath "$DERIVED" \
             -resultBundlePath UITests.xcresult \
             CODE_SIGNING_ALLOWED=NO
-      - name: 收集截图（01-dashboard … 10-settings）
-        if: always()
-        run: python3 tools/collect-screenshots.py || true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: screenshots
-          path: screenshots/
-          if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ui-tests-xcresult
-          path: UITests.xcresult
-          if-no-files-found: ignore
-
-      - name: 打包模拟器 .app（未签名，供验证包体结构）
+      - name: 收集截图
         if: always()
         run: |
-          APP=$(find "$DERIVED/Build/Products" -maxdepth 2 -name 'FreeRoute.app' | head -1)
-          if [ -n "$APP" ]; then
-            mkdir -p Payload && cp -R "$APP" Payload/
-            ditto -c -k --keepParent Payload FreeRoute-simulator-unsigned.ipa
-            du -h FreeRoute-simulator-unsigned.ipa
-          fi
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: simulator-app-unsigned
-          path: FreeRoute-simulator-unsigned.ipa
-          if-no-files-found: warn
+          python3 tools/collect-screenshots.py || true
+          {
+            echo "## 截图产出"
+            if [ -d screenshots ]; then ls screenshots | sed 's/^/- /'; else echo "- 无（UI 测试未执行或未产出附件）"; fi
+            echo "- 以上如存在，均为 **iOS 模拟器**截图，不等同于真机截图。"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  # ───────── 步骤 8–11：Archive、导出 IPA、上传产物、构建报告 ─────────
-  archive:
-    name: Archive 与 IPA
-    runs-on: macos-26
-    needs: [env-check, build-test]
-    if: needs.build-test.result == 'success'
-    env:
-      DEVELOPER_DIR: ${{ needs.env-check.outputs.xcode_path }}
-      SIGNING: ${{ github.event.inputs.signing }}
-      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: brew install xcodegen
-
+      # ── 步骤 8–11：Archive / IPA / 产物 / 报告 ──
       - name: 未签名模式
-        if: ${{ github.event.inputs.signing == 'none' || github.event.inputs.signing == '' }}
+        if: env.SIGNING == 'none' || env.SIGNING == ''
         run: echo "CODE_SIGN_ARGS=CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=" >> "$GITHUB_ENV"
-
       - name: 手动签名（证书 + 描述文件）
-        if: ${{ github.event.inputs.signing == 'manual' }}
+        if: env.SIGNING == 'manual'
         env:
           CERT_P12: ${{ secrets.DEV_CERT_P12_BASE64 }}
           CERT_PASSWORD: ${{ secrets.DEV_CERT_PASSWORD }}
           PROFILE: ${{ secrets.MOBILE_PROVISION_BASE64 }}
           PROFILE_NAME: ${{ secrets.MOBILE_PROVISION_NAME }}
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          if [ -z "$CERT_P12" ]; then echo "缺少 Secrets: DEV_CERT_P12_BASE64"; exit 1; fi
+          [ -n "$CERT_P12" ] || { echo "缺少 Secrets: DEV_CERT_P12_BASE64"; exit 1; }
           KC="$RUNNER_TEMP/build.keychain"
           security create-keychain -p ci "$KC"
           security default-keychain -s "$KC"
@@ -220,15 +172,17 @@ jobs:
           security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$CERT_PASSWORD" -T /usr/bin/codesign
           mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
           echo "$PROFILE" | base64 -D > "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_NAME"
-          echo "CODE_SIGN_ARGS=-allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM_ID" >> "$GITHUB_ENV"
-
+          echo "CODE_SIGN_ARGS=-allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM" >> "$GITHUB_ENV"
       - name: 自动签名（Apple ID + 专用密码 + Team ID）
-        if: ${{ github.event.inputs.signing == 'automatic' }}
+        if: env.SIGNING == 'automatic'
+        env:
+          TEAM: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$TEAM_ID" ]; then echo "缺少 Secret: APPLE_TEAM_ID"; exit 1; fi
-          echo "CODE_SIGN_ARGS=-allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM_ID CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=Apple Development CODE_SIGNING_ALLOWED=YES" >> "$GITHUB_ENV"
+          [ -n "$TEAM" ] || { echo "缺少 Secret: APPLE_TEAM_ID"; exit 1; }
+          echo "CODE_SIGN_ARGS=-allowProvisioningUpdates DEVELOPMENT_TEAM=$TEAM CODE_SIGN_STYLE=Automatic CODE_SIGN_IDENTITY=Apple Development CODE_SIGNING_ALLOWED=YES" >> "$GITHUB_ENV"
 
-      - name: 步骤 8 · Archive（Release，真机架构）
+      - name: 步骤 8 · Archive（Release，真机 arm64）
+        if: steps.'步骤 5 · 编译（iOS 模拟器，不签名）'.outcome == 'success'
         run: |
           xcodegen generate
           # shellcheck disable=SC2086
@@ -238,15 +192,15 @@ jobs:
             -archivePath "$RUNNER_TEMP/FreeRoute.xcarchive" \
             -configuration Release \
             $CODE_SIGN_ARGS
-
       - name: 步骤 9 · 导出 IPA
+        if: steps.'步骤 8 · Archive（Release，真机 arm64）'.outcome == 'success'
         run: |
           python3 tools/make-export-options.py "${SIGNING:-none}"
           if [ "${SIGNING:-none}" = "none" ]; then
             rm -rf Payload && mkdir -p Payload
             cp -R "$RUNNER_TEMP/FreeRoute.xcarchive/Products/Applications/"*.app Payload/
             ditto -c -k --keepParent Payload FreeRoute-unsigned.ipa
-            echo "已生成未签名 IPA：只能验证产物结构，不能直接安装"
+            echo "已生成未签名 IPA：结构完整，但不能直接安装"
           else
             xcodebuild -exportArchive \
               -archivePath "$RUNNER_TEMP/FreeRoute.xcarchive" \
@@ -256,22 +210,28 @@ jobs:
             cp "$RUNNER_TEMP/export/"*.ipa FreeRoute.ipa
           fi
       - name: 步骤 10 · 上传产物
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: ipa
-          path: FreeRoute*.ipa
+          name: build-output
+          path: |
+            FreeRoute*.ipa
+            screenshots/
+            UnitTests.xcresult
+            UITests.xcresult
           if-no-files-found: warn
       - name: 步骤 11 · 构建报告
         if: always()
         run: |
           {
             echo "## 构建报告"
-            echo "- 事件：\`${{ github.event_name }}\` ｜ 签名：\`${{ github.event.inputs.signing || 'none' }}\`"
-            echo "- Xcode：\`$(xcodebuild -version | head -1)\`"
+            echo "- 事件：\`${{ github.event_name }}\` ｜ 签名：\`${{ env.SIGNING || 'none' }}\`"
+            echo "- Xcode：\`$(xcodebuild -version 2>/dev/null | head -1)\`"
             echo "- Swift：\`$(swift --version 2>&1 | head -1)\`"
-            echo "- 产物："
-            ls -la FreeRoute*.ipa 2>/dev/null | awk '{print "  - " $9 " (" $5 " 字节)"}' || echo "  - 无 IPA"
+            echo "- IPA 产物："
+            ls -la FreeRoute*.ipa 2>/dev/null | awk '{print "  - " $9 "（" $5 " 字节）"}' || echo "  - 无"
             echo
-            echo "**如实说明**：未签名 IPA 无法直接安装。免费 Apple ID 的侧载有效期、设备数量、App Groups / Live Activity 等能力限制由 Apple 决定，本项目不做任何保证；需要 App Groups 与 Live Activity 请使用付费 Apple Developer 账号签名。"
+            echo "**如实说明**：未签名 IPA 不能直接安装。免费 Apple ID 的 7 天有效期、可安装数量、"
+            echo "以及 App Groups / Live Activity 能力限制均由 Apple 决定，本项目不做任何保证；"
+            echo "本工程使用 App Group 与推送环境键，完整功能需要付费 Apple Developer 账号签名。"
           } >> "$GITHUB_STEP_SUMMARY"

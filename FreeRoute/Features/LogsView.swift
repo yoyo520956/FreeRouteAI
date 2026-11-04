@@ -43,7 +43,6 @@ struct LogsView: View {
     }
 
     var body: some View {
-        NavigationStack {
             ZStack {
                 FRBackground()
                 ScrollView {
@@ -104,7 +103,6 @@ struct LogsView: View {
             } message: {
                 Text(pruneMessage ?? "")
             }
-        }
     }
 
     // MARK: - 顶部统计条

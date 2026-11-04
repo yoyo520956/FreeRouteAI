@@ -15,7 +15,6 @@ struct ModelDetailView: View {
     }
 
     var body: some View {
-        NavigationStack {
             ZStack {
                 FRBackground()
                 ScrollView {
@@ -39,7 +38,6 @@ struct ModelDetailView: View {
                     Button("完成") { dismiss() }
                 }
             }
-        }
     }
 
     // MARK: 头部

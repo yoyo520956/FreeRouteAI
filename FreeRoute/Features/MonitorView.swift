@@ -7,7 +7,6 @@ struct MonitorView: View {
     @State private var pip = PiPController.shared
 
     var body: some View {
-        NavigationStack {
             ZStack {
                 FRBackground()
                 ScrollView {
@@ -24,7 +23,6 @@ struct MonitorView: View {
             }
             .navigationTitle("实时监控")
             .navigationBarTitleDisplayMode(.inline)
-        }
     }
 
     // MARK: PiP 规格布局
