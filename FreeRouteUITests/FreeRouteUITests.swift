@@ -11,8 +11,15 @@ final class FreeRouteUITests: XCTestCase {
         // 干净环境：每次测试用独立数据库，避免历史数据影响断言
         app.launchArguments += ["-fr UITestMode"]
         app.launch()
-        // 首帧渲染完成
-        _ = app.wait(for: .runningForeground, timeout: 30)
+        // CI 偶发 "Failed to launch com.freeroute.ai"（模拟器还没起干净），
+        // 起不来就重启一次，别让整个用例因为基础设施抖动变红
+        if !app.wait(for: .runningForeground, timeout: 30) {
+            print("⚠️ 首次启动未进入前台，重启一次")
+            app.terminate()
+            sleep2(1.0)
+            app.launch()
+            _ = app.wait(for: .runningForeground, timeout: 60)
+        }
         sleep2(1.2)
     }
 
@@ -152,12 +159,33 @@ final class FreeRouteUITests: XCTestCase {
     /// 直接 typeText 会得到 "https://api.example.com/v1" + "not-a-url" 这种
     /// 前缀依然合法的字符串，于是"非法输入"用例其实输入的是合法值，
     /// 校验当然放过它（本轮 CI 就是这样假失败的）。
-    private func type(into identifier: String, _ text: String) {
+    /// 返回**实际读回**的值，不返回"我以为输入了什么"。
+    /// 实测：Base URL 字段被预填成 "https://"，而退格并不总是生效；若拿预期值
+    /// 去断言产品行为，就会把"整串仍然合法"当成"非法输入"，得出假结论。
+    @discardableResult
+    private func type(into identifier: String, _ text: String) -> String {
         let f = field(identifier)
-        let existing = (f.value as? String) ?? ""
-        for _ in 0..<existing.count { f.typeText("\u{8}") }
+        for _ in 0..<3 {
+            let current = (f.value as? String) ?? ""
+            if current.isEmpty { break }
+            for _ in 0..<current.count { f.typeText("\u{8}") }
+        }
         f.typeText(text)
-        print("字段 \(identifier)：原值=\(existing.isEmpty ? "空" : existing) → 现值=\(text)")
+        let actual = (f.value as? String) ?? ""
+        print("字段 \(identifier)：期望=\(text) 实际=\(actual.isEmpty ? "空" : actual)")
+        return actual
+    }
+
+    /// 只追加、不清空：用于「字段有稳定预填、且本环境退格不生效」的场景。
+    /// 预填值来自 init（新建态 Base URL = "https://"），是产品自身行为，
+    /// 比"能不能清空"这种测试端不确定性可靠得多。
+    @discardableResult
+    private func append(into identifier: String, _ text: String) -> String {
+        let f = field(identifier)
+        f.typeText(text)
+        let actual = (f.value as? String) ?? ""
+        print("字段 \(identifier)：追加 \(text) 后实际=\(actual.isEmpty ? "空" : actual)")
+        return actual
     }
 
     private func tapAny(_ identifier: String, timeout: TimeInterval = 8,
@@ -306,7 +334,7 @@ final class FreeRouteUITests: XCTestCase {
 
     // MARK: 真实功能：Base URL 非法时禁止保存
 
-    func testInvalidBaseURLBlocksSave() throws {
+    func testInvalidInputBlocksSave() throws {
         // 注意：这个用例此前用 `guard … else { return }` 提前退出，
         // 定位失败也会算"通过"（空转）。现在全部改成真断言。
         openProvidersSheet()
@@ -315,33 +343,33 @@ final class FreeRouteUITests: XCTestCase {
         tapAny("provider.addCustom")
         sleep2(1.2)
 
-        type(into: "provider.name", "非法地址源")
-        sleep2(0.4)
-        type(into: "provider.baseURL", "not-a-url")
-
-        // 不断言 save.isEnabled：SwiftUI 工具栏按钮的 .disabled() 不保证
-        // 透传到 XCUITest 的 enabled 属性（CI 实测红字已出现但 isEnabled 仍为 true）。
-        // 改断言真实结果：界面必须给出明确错误提示，且必须仍停在编辑器（没被保存关掉）。
-        // 用谓词按子串匹配：Label 的可访问性文本可能被系统拼接或截断，
-        // 全等匹配太脆（改一个字就查不到）
-        dismissKeyboardIfNeeded()
-
-        // 断言真正的产品保证：非法 Base URL 点「保存」绝不能把服务商存进去并关掉编辑器。
-        // 判据用 provider.baseURL 这个 identifier（实测最可靠的定位方式）：
-        // 保存成功会 dismiss 编辑器，那时它就消失。
+        // 主断言走「新建态名称为空」这条路径：不需要任何文本输入，
+        // 因此不受"XCUITest 清不空预填字段"这类测试端抖动影响，
+        // 覆盖的却是同一个产品保证 —— 校验在 save() 里，不只在 .disabled 修饰符上。
         let save = app.buttons["保存"]
-        XCTAssertTrue(save.waitForExistence(timeout: 5), "应仍停在编辑器里（找不到保存按钮）")
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "找不到保存按钮")
         save.tap()
         sleep2(1.5)
         XCTAssertTrue(app.descendants(matching: .any)["provider.baseURL"].firstMatch.exists,
-                      "Base URL 非法时点保存必须留在编辑器里，不能静默保存并关闭")
-
-        // 校验拦下来必须给出可察觉的提示（系统弹窗，XCUITest 定位可靠）
+                      "名称为空时点保存必须留在编辑器里，不能静默保存并关闭")
         let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5),
-                      "非法输入被拒绝时必须给出明确提示")
+        XCTAssertTrue(alert.waitForExistence(timeout: 5), "非法输入被拒绝时必须给出明确提示")
         alert.buttons["好"].tap()
         sleep2(0.5)
+
+        // 次断言：Base URL 只有 scheme 时同样必须被拦。
+        // 新建态默认就预填 "https://"，所以这里什么都不用输入 —— 不需要清空字段
+        // （XCUITest 清不空预填值是本轮踩过的坑），路径完全确定。
+        type(into: "provider.name", "只有协议的地址")
+        sleep2(0.4)
+        dismissKeyboardIfNeeded()
+        app.buttons["保存"].tap()
+        sleep2(1.5)
+        XCTAssertTrue(app.descendants(matching: .any)["provider.baseURL"].firstMatch.exists,
+                      "Base URL 只有 https:// 没有域名时点保存必须留在编辑器里")
+        let urlAlert = app.alerts.firstMatch
+        XCTAssertTrue(urlAlert.waitForExistence(timeout: 5), "Base URL 非法时必须给出提示")
+        urlAlert.buttons["好"].tap()
     }
 
     // MARK: 真实功能：Smart 模式可切换且持久

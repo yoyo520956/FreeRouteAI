@@ -54,7 +54,13 @@ struct ProviderEditorView: View {
     }
 
     private var baseURLValid: Bool {
-        baseURL.hasPrefix("http://") || baseURL.hasPrefix("https://")
+        let trimmed = baseURL.trimmingCharacters(in: .whitespaces)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return false }
+        // 只有 scheme 不算合法：新建态默认就预填 "https://"，
+        // 用 hasPrefix 判断会把它当成合法地址直接落库（真实缺陷）
+        return !(url.host ?? "").isEmpty
     }
     private var nameValid: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
     private var canSave: Bool { baseURLValid && nameValid }
@@ -81,7 +87,7 @@ struct ProviderEditorView: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .keyboardType(.URL)
                     if !baseURLValid {
-                        Label("Base URL 必须以 http:// 或 https:// 开头", systemImage: "exclamationmark.triangle")
+                        Label("Base URL 需填完整地址（以 http:// 或 https:// 开头并含域名）", systemImage: "exclamationmark.triangle")
                             .font(.system(size: 11)).foregroundStyle(FRDesign.err)
                     }
                     TextField("请求路径（留空用协议默认）", text: $requestPath)
@@ -233,7 +239,7 @@ struct ProviderEditorView: View {
     /// 非法配置就直接落库 —— UI 测试真的把 "not-a-url" 存进去过。
     private var blockingMessage: String? {
         if !nameValid { return "请填写服务商名称" }
-        if !baseURLValid { return "Base URL 必须以 http:// 或 https:// 开头" }
+        if !baseURLValid { return "Base URL 需填完整地址（以 http:// 或 https:// 开头并含域名）" }
         return nil
     }
 
