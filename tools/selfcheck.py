@@ -145,6 +145,32 @@ FORBIDDEN = [
     (r'\(try\?[^\n]*\)\.value\b', 'Optional 直接取 .value（应为 ?.value）'),
 ]
 
+# 闭包参数存进属性必须显式 @escaping（CI 真实报过：
+# "assigning non-escaping parameter 'title' to an '@escaping' closure"）
+RE_SELF_ASSIGN = re.compile(r"self\.(\w+)\s*=\s*(\w+)(?![\w(])")  # 排除 self.x = x() 这种当场调用的
+RE_ESC_PARAM = re.compile(r"(?:@escaping\b[^(){};]*?\b(\w+)\s*:)|\b(\w+)\s*:\s*@escaping\b")
+RE_CLOS_PARAM = re.compile(r"\b(\w+)\s*:\s*(?:@[\w.]+\s+)*\([^()]*\)\s*->\s*[\w<>?,.\s]+[,)]")
+
+
+def check_stored_closure(rel, raw):
+    """闭包参数被存进属性却没有 @escaping —— CI 真实报过：
+    assigning non-escaping parameter 'title' to an '@escaping' closure"""
+    stored = {m.group(1) for m in RE_SELF_ASSIGN.finditer(raw)
+              if m.group(1) == m.group(2)}
+    if not stored:
+        return
+    escaped = {(m.group(1) or m.group(2)) for m in RE_ESC_PARAM.finditer(raw)}
+    for m in RE_CLOS_PARAM.finditer(raw):
+        name, start = m.group(1), m.start()
+        if name not in stored or name in escaped:
+            continue
+        # 只在 init(...) 参数列表里报，避免把普通函数参数误判
+        if "init(" not in raw[max(0, start - 400):start]:
+            continue
+        ln = raw[:start].count("\n") + 1
+        errors.append(f"{rel}:{ln} 闭包参数 {name} 被存进属性，需要 @escaping")
+
+
 # 同屏重复标签：Section 的行文案与区块标题同名时，读屏会连读两遍，
 # XCUITest 也会报 Multiple matching elements（本项目真实踩过：设置页两行「安全」）
 DUP_LABEL_WINDOW = 260
@@ -175,6 +201,7 @@ def main():
         rel = os.path.relpath(f, ROOT)
         check_balance(rel, code)
         check_duplicate_section_labels(rel, raw)  # 必须用 raw：code 里字符串已被掩码
+        check_stored_closure(rel, raw)
 
         # Live Activity 闭包里的 context 只有固定成员（CI 真实踩过：context.gatewayURL）
         if 'ActivityConfiguration' in code or 'DynamicIsland' in code:
