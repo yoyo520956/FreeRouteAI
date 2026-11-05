@@ -317,7 +317,14 @@ final class FreeRouteUITests: XCTestCase {
 
         type(into: "provider.name", "CI 测试源")
         sleep2(0.4)
-        type(into: "provider.baseURL", "https://api.example.com/v1")
+        // 新建态 Base URL 已预填 "https://"，且实测退格清不掉它，
+        // 所以这里只补域名部分，结果恒为 https://api.example.com/v1。
+        // （若哪天退格又能用了，下面的断言会带着实际值报出来，不会静默跑偏）
+        let url = append(into: "provider.baseURL", "api.example.com/v1")
+        if !url.isEmpty {
+            XCTAssertTrue(url == "https://api.example.com/v1",
+                          "Base URL 实际值与预期不符：\(url)")
+        }
 
         dismissKeyboardIfNeeded()
 
