@@ -81,10 +81,8 @@ final class FreeRouteUITests: XCTestCase {
         let el = app.descendants(matching: .any)[identifier].firstMatch
         guard el.waitForExistence(timeout: timeout) else { return false }
         scrollToFind(el)
-        guard el.isHittable else {
-            print("identifier=\(identifier) 存在但点不到，跳过本次尝试")
-            return false
-        }
+        // 注意：不要用 isHittable 做门槛。SwiftUI 的 Menu/工具栏按钮经常报
+        // 「不可命中」，而裸 tap() 实际点得开（CI 实测：moreActions 就是这样）。
         el.tap()
         return true
     }
@@ -94,14 +92,20 @@ final class FreeRouteUITests: XCTestCase {
     /// 「addProvider 点成功但 sheet 没出现」，因此必须等 sheet 真出现，
     /// 否则整条流程重试一次。
     private func openProvidersSheet(tries: Int = 3) {
+        tab("模型")
         for i in 0..<tries {
-            tab("模型")
-            if tapIfPresent("moreActions", timeout: 10) {
-                sleep2(0.9)
-                _ = tapIfPresent("addProvider", timeout: 6)
+            let add = app.descendants(matching: .any)["addProvider"].firstMatch
+            if !add.exists {
+                // 菜单没展开才点 moreActions：已展开时再点一次等于把菜单关掉，
+                // 这正是上一轮三次重试全部失败的原因
+                if !tapIfPresent("moreActions", timeout: 10) {
+                    print("第 \(i + 1) 次：moreActions 定位失败")
+                }
+                sleep2(1.0)
             }
+            _ = tapIfPresent("addProvider", timeout: 6)
             if app.sheets.firstMatch.waitForExistence(timeout: 5) { return }
-            print("第 \(i + 1) 次未能打开服务商面板，重试")
+            print("第 \(i + 1) 次：点了添加服务商但 sheet 没出现，重试")
             sleep2(0.8)
         }
         XCTFail("多次尝试仍无法打开「服务商管理」sheet")
@@ -272,7 +276,10 @@ final class FreeRouteUITests: XCTestCase {
         // 不断言 save.isEnabled：SwiftUI 工具栏按钮的 .disabled() 不保证
         // 透传到 XCUITest 的 enabled 属性（CI 实测红字已出现但 isEnabled 仍为 true）。
         // 改断言真实结果：界面必须给出明确错误提示，且必须仍停在编辑器（没被保存关掉）。
-        let hint = app.descendants(matching: .any)["Base URL 必须以 http:// 或 https:// 开头"].firstMatch
+        // 用谓词按子串匹配：Label 的可访问性文本可能被系统拼接或截断，
+        // 全等匹配太脆（改一个字就查不到）
+        let hint = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@", "必须以 http")).firstMatch
         XCTAssertTrue(hint.waitForExistence(timeout: 6),
                       "非法 Base URL 时必须显示行内错误提示")
         scrollToFind(hint)
