@@ -77,10 +77,13 @@ final class FreeRouteUITests: XCTestCase {
     /// 定位到就点、定位不到只返回 false（不判失败）。
     /// 用于「点击有动画竞态、需要重试」的流程；确定性步骤仍用 tapAny。
     @discardableResult
-    private func tapIfPresent(_ identifier: String, timeout: TimeInterval) -> Bool {
+    /// scroll=false：菜单/弹层里的元素绝不能自动滚动 —— 菜单已展开时
+    /// 一次 swipeUp 就等于把菜单划掉（CI 三轮「点了但 sheet 没出现」就是这么来的）。
+    private func tapIfPresent(_ identifier: String, timeout: TimeInterval,
+                              scroll: Bool = false) -> Bool {
         let el = app.descendants(matching: .any)[identifier].firstMatch
         guard el.waitForExistence(timeout: timeout) else { return false }
-        scrollToFind(el)
+        if scroll { scrollToFind(el) }
         // 注意：不要用 isHittable 做门槛。SwiftUI 的 Menu/工具栏按钮经常报
         // 「不可命中」，而裸 tap() 实际点得开（CI 实测：moreActions 就是这样）。
         el.tap()
@@ -109,11 +112,12 @@ final class FreeRouteUITests: XCTestCase {
         XCTFail("多次尝试仍无法打开「服务商管理」sheet")
     }
 
-    private func tapAny(_ identifier: String, timeout: TimeInterval = 8) -> XCUIElement {
+    private func tapAny(_ identifier: String, timeout: TimeInterval = 8,
+                        scroll: Bool = false) -> XCUIElement {
         let el = app.descendants(matching: .any)[identifier].firstMatch
         XCTAssertTrue(el.waitForExistence(timeout: timeout),
                       "找不到可交互元素（identifier=\(identifier)）")
-        scrollToFind(el)
+        if scroll { scrollToFind(el) }
         XCTAssertTrue(el.isHittable,
                       "identifier=\(identifier) 存在但滚动后仍点不到（可能被遮挡或在屏幕外）")
         el.tap()
@@ -231,7 +235,7 @@ final class FreeRouteUITests: XCTestCase {
         openProvidersSheet()
         // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
         // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
-        tapAny("provider.addCustom")
+        tapAny("provider.addCustom", scroll: true)
         sleep2(1.2)
         shot("11-provider-editor")
 
@@ -264,7 +268,7 @@ final class FreeRouteUITests: XCTestCase {
         openProvidersSheet()
         // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
         // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
-        tapAny("provider.addCustom")
+        tapAny("provider.addCustom", scroll: true)
         sleep2(1.2)
 
         field("provider.name").typeText("非法地址源")
