@@ -147,6 +147,19 @@ final class FreeRouteUITests: XCTestCase {
         }
     }
 
+    /// 往输入框里写值：先按字段现有长度退格清空，再输入。
+    /// `typeText` 是**追加**而不是替换 —— 字段若被预填（编辑态或上一条用例残留），
+    /// 直接 typeText 会得到 "https://api.example.com/v1" + "not-a-url" 这种
+    /// 前缀依然合法的字符串，于是"非法输入"用例其实输入的是合法值，
+    /// 校验当然放过它（本轮 CI 就是这样假失败的）。
+    private func type(into identifier: String, _ text: String) {
+        let f = field(identifier)
+        let existing = (f.value as? String) ?? ""
+        for _ in 0..<existing.count { f.typeText("\u{8}") }
+        f.typeText(text)
+        print("字段 \(identifier)：原值=\(existing.isEmpty ? "空" : existing) → 现值=\(text)")
+    }
+
     private func tapAny(_ identifier: String, timeout: TimeInterval = 8,
                         scroll: Bool = false) -> XCUIElement {
         let el = app.descendants(matching: .any)[identifier].firstMatch
@@ -274,9 +287,9 @@ final class FreeRouteUITests: XCTestCase {
         sleep2(1.2)
         shot("11-provider-editor")
 
-        field("provider.name").typeText("CI 测试源")
+        type(into: "provider.name", "CI 测试源")
         sleep2(0.4)
-        field("provider.baseURL").typeText("https://api.example.com/v1")
+        type(into: "provider.baseURL", "https://api.example.com/v1")
 
         dismissKeyboardIfNeeded()
 
@@ -302,9 +315,9 @@ final class FreeRouteUITests: XCTestCase {
         tapAny("provider.addCustom")
         sleep2(1.2)
 
-        field("provider.name").typeText("非法地址源")
+        type(into: "provider.name", "非法地址源")
         sleep2(0.4)
-        field("provider.baseURL").typeText("not-a-url")
+        type(into: "provider.baseURL", "not-a-url")
 
         // 不断言 save.isEnabled：SwiftUI 工具栏按钮的 .disabled() 不保证
         // 透传到 XCUITest 的 enabled 属性（CI 实测红字已出现但 isEnabled 仍为 true）。
