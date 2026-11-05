@@ -51,8 +51,8 @@ struct FRAdaptiveHeader<Title: View, Control: View>: View {
     private let controlIdealWidth: CGFloat
 
     init(controlWidth: CGFloat = 150,
-         @escaping @ViewBuilder title: () -> Title,
-         @escaping @ViewBuilder control: () -> Control) {
+         @ViewBuilder title: @escaping () -> Title,
+         @ViewBuilder control: @escaping () -> Control) {
         self.controlIdealWidth = controlWidth
         self.title = title
         self.control = control

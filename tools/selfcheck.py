@@ -171,6 +171,17 @@ def check_stored_closure(rel, raw):
         errors.append(f"{rel}:{ln} 闭包参数 {name} 被存进属性，需要 @escaping")
 
 
+RE_BAD_ESCAPING = re.compile(r'@escaping\s+(?:@\w+\s+)*\w+\s*:')
+
+
+def check_escaping_position(rel, raw):
+    """@escaping 只能贴在类型前（name: @escaping () -> T），
+    写在参数名前会报：attribute can only be applied to types, not declarations"""
+    for m in RE_BAD_ESCAPING.finditer(raw):
+        ln = raw[:m.start()].count("\n") + 1
+        errors.append(f"{rel}:{ln} @escaping 位置错：应写成 name: @escaping (类型)，不能放在参数名前")
+
+
 # 同屏重复标签：Section 的行文案与区块标题同名时，读屏会连读两遍，
 # XCUITest 也会报 Multiple matching elements（本项目真实踩过：设置页两行「安全」）
 DUP_LABEL_WINDOW = 260
@@ -202,6 +213,7 @@ def main():
         check_balance(rel, code)
         check_duplicate_section_labels(rel, raw)  # 必须用 raw：code 里字符串已被掩码
         check_stored_closure(rel, raw)
+        check_escaping_position(rel, raw)
 
         # Live Activity 闭包里的 context 只有固定成员（CI 真实踩过：context.gatewayURL）
         if 'ActivityConfiguration' in code or 'DynamicIsland' in code:
