@@ -94,16 +94,14 @@ final class FreeRouteUITests: XCTestCase {
     private func openProvidersSheet(tries: Int = 3) {
         tab("模型")
         for i in 0..<tries {
-            let add = app.descendants(matching: .any)["addProvider"].firstMatch
-            if !add.exists {
-                // 菜单没展开才点 moreActions：已展开时再点一次等于把菜单关掉，
-                // 这正是上一轮三次重试全部失败的原因
-                if !tapIfPresent("moreActions", timeout: 10) {
-                    print("第 \(i + 1) 次：moreActions 定位失败")
-                }
-                sleep2(1.0)
+            // 必须每次都点 moreActions。上一轮我加的「addProvider 已存在就跳过」
+            // 是错的：SwiftUI 的 Menu 项在菜单关闭时同样存在于可访问性树，
+            // 于是等于从没展开过菜单，点它自然什么也不会发生（CI 实测三次全空）。
+            if !tapIfPresent("moreActions", timeout: 10) {
+                print("第 \(i + 1) 次：moreActions 定位失败")
             }
-            _ = tapIfPresent("addProvider", timeout: 6)
+            sleep2(1.0)
+            _ = tapIfPresent("addProvider", timeout: 5)
             if app.sheets.firstMatch.waitForExistence(timeout: 5) { return }
             print("第 \(i + 1) 次：点了添加服务商但 sheet 没出现，重试")
             sleep2(0.8)
