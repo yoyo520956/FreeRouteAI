@@ -182,6 +182,15 @@ def check_escaping_position(rel, raw):
         errors.append(f"{rel}:{ln} @escaping 位置错：应写成 name: @escaping (类型)，不能放在参数名前")
 
 
+def check_bad_query_members(rel, raw):
+    """XCUIElementQuery 只有 firstMatch，没有 lastMatch（取末尾要 element(boundBy: -1)）。
+    CI 真实报过：value of type 'XCUIElementQuery' has no member 'lastMatch'"""
+    for m in re.finditer(r"\.lastMatch\b", raw):
+        ln = raw[:m.start()].count("\n") + 1
+        errors.append(f"{rel}:{ln} .lastMatch 不存在：Query 只有 firstMatch，"
+                      f"取末尾用 element(boundBy: -1)")
+
+
 # 同屏重复标签：Section 的行文案与区块标题同名时，读屏会连读两遍，
 # XCUITest 也会报 Multiple matching elements（本项目真实踩过：设置页两行「安全」）
 DUP_LABEL_WINDOW = 260
@@ -214,6 +223,7 @@ def main():
         check_duplicate_section_labels(rel, raw)  # 必须用 raw：code 里字符串已被掩码
         check_stored_closure(rel, raw)
         check_escaping_position(rel, raw)
+        check_bad_query_members(rel, raw)
 
         # Live Activity 闭包里的 context 只有固定成员（CI 真实踩过：context.gatewayURL）
         if 'ActivityConfiguration' in code or 'DynamicIsland' in code:

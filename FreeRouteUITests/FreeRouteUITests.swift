@@ -63,7 +63,8 @@ final class FreeRouteUITests: XCTestCase {
             } else {
                 // 这套 SwiftUI 不把弹层暴露成 sheet，弹层的 scrollView 在树的
                 // 最后面；取 firstMatch 会滚到背后那一页，等于白滚
-                container = app.scrollViews.lastMatch
+                // XCUIElementQuery 没有 lastMatch，取末尾要用 boundBy: -1
+                container = app.scrollViews.element(boundBy: -1)
             }
             if container.exists && container.isHittable {
                 container.swipeUp()
