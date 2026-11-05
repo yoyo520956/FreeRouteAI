@@ -228,7 +228,25 @@ struct ProviderEditorView: View {
         return p
     }
 
+    /// 校验必须落在动作里，不能只挂在按钮的 `.disabled()` 上。
+    /// 修饰符一旦因任何原因失效（状态没刷新、自动化点击、以后换成别的控件），
+    /// 非法配置就直接落库 —— UI 测试真的把 "not-a-url" 存进去过。
+    private var blockingMessage: String? {
+        if !nameValid { return "请填写服务商名称" }
+        if !baseURLValid { return "Base URL 必须以 http:// 或 https:// 开头" }
+        return nil
+    }
+
+    /// 返回 false 表示被校验拦住，调用方必须中止
+    private func refuseInvalidInput() -> Bool {
+        guard let msg = blockingMessage else { return false }
+        alertText = msg
+        showAlert = true
+        return true
+    }
+
     private func save() {
+        if refuseInvalidInput() { return }
         let p = buildProvider()
         if original == nil {
             app.addProvider(p)
@@ -239,6 +257,7 @@ struct ProviderEditorView: View {
     }
 
     private func saveKey() {
+        if refuseInvalidInput() { return }
         let p = buildProvider()
         // 新服务商要先落库，才有 id 可以生成钥匙串引用
         if original == nil { app.addProvider(p) }

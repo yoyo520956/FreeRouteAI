@@ -323,11 +323,12 @@ final class FreeRouteUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["provider.baseURL"].firstMatch.exists,
                       "Base URL 非法时点保存必须留在编辑器里，不能静默保存并关闭")
 
-        // 行内红字提示是加分项，不作为断言：Label 在 Form 里的可访问性暴露方式
-        // 在不同 SDK 上不一致（实测 CI 里 CONTAINS 匹配不到），
-        // 拿它当判据会把"测试定位不到"误报成"产品没提示"。
-        let hint = findText("必须以 http", tries: 2)
-        print(hint.exists ? "✓ 行内错误提示可见" : "ℹ️ 未定位到行内提示文本（不影响本用例结论）")
+        // 校验拦下来必须给出可察觉的提示（系统弹窗，XCUITest 定位可靠）
+        let alert = app.alerts.firstMatch
+        XCTAssertTrue(alert.waitForExistence(timeout: 5),
+                      "非法输入被拒绝时必须给出明确提示")
+        alert.buttons["好"].tap()
+        sleep2(0.5)
     }
 
     // MARK: 真实功能：Smart 模式可切换且持久
