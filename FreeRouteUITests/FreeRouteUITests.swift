@@ -124,6 +124,29 @@ final class FreeRouteUITests: XCTestCase {
         XCTFail("多次尝试仍无法打开「服务商管理」sheet")
     }
 
+    /// 在懒加载容器（LazyVStack / Form）里按子串找文本。
+    /// 这类容器不渲染视口外内容，元素"不存在"往往只是还没滚到，
+    /// 所以必须允许边滚边找（本项目已因此误判过两次"产品没渲染"）。
+    private func findText(_ substring: String, tries: Int = 5) -> XCUIElement {
+        let q = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", substring))
+        for i in 0..<tries {
+            if q.firstMatch.exists { return q.firstMatch }
+            let sv = app.scrollViews.element(boundBy: -1)
+            if sv.exists { sv.swipeUp() } else { app.swipeUp() }
+            sleep2(0.5)
+            _ = i
+        }
+        return q.firstMatch
+    }
+
+    /// 收起键盘：键盘会盖住输入框下方的行内错误提示
+    private func dismissKeyboardIfNeeded() {
+        if app.keyboards.count > 0 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).tap()
+            sleep2(0.6)
+        }
+    }
+
     private func tapAny(_ identifier: String, timeout: TimeInterval = 8,
                         scroll: Bool = false) -> XCUIElement {
         let el = app.descendants(matching: .any)[identifier].firstMatch
@@ -255,12 +278,7 @@ final class FreeRouteUITests: XCTestCase {
         sleep2(0.4)
         field("provider.baseURL").typeText("https://api.example.com/v1")
 
-        // 键盘会挡住工具栏的「保存」：点导航栏标题区域收起键盘
-        // （标题居中，不会误触右侧「保存」或左侧「取消」）
-        if app.keyboards.count > 0 {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).tap()
-            sleep2(0.6)
-        }
+        dismissKeyboardIfNeeded()
 
         let save = app.buttons["保存"]
         XCTAssertTrue(save.waitForExistence(timeout: 5), "找不到保存按钮")
@@ -268,7 +286,8 @@ final class FreeRouteUITests: XCTestCase {
         save.tap()
         sleep2(1.2)
 
-        XCTAssertTrue(app.staticTexts["CI 测试源"].exists, "保存后服务商应出现在列表")
+        // 新建的行在 LazyVStack 里可能还在视口外，滚动查找
+        XCTAssertTrue(findText("CI 测试源").exists, "保存后服务商应出现在列表")
         shot("12-provider-saved")
     }
 
@@ -292,12 +311,11 @@ final class FreeRouteUITests: XCTestCase {
         // 改断言真实结果：界面必须给出明确错误提示，且必须仍停在编辑器（没被保存关掉）。
         // 用谓词按子串匹配：Label 的可访问性文本可能被系统拼接或截断，
         // 全等匹配太脆（改一个字就查不到）
-        let hint = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "必须以 http")).firstMatch
-        XCTAssertTrue(hint.waitForExistence(timeout: 6),
-                      "非法 Base URL 时必须显示行内错误提示")
-        scrollToFind(hint)
-        XCTAssertTrue(hint.exists, "提示应仍在编辑器内可见（说明未被静默保存）")
+        // 键盘会正好盖住输入框下方那行红字（SwiftUI 会把聚焦输入框顶到键盘上方），
+        // 所以先收起键盘再找提示
+        dismissKeyboardIfNeeded()
+        let hint = findText("必须以 http")
+        XCTAssertTrue(hint.exists, "非法 Base URL 时必须显示行内错误提示（且未被静默保存）")
     }
 
     // MARK: 真实功能：Smart 模式可切换且持久
