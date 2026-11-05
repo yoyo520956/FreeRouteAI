@@ -61,7 +61,9 @@ final class FreeRouteUITests: XCTestCase {
             if sheet.exists {
                 container = sheet.scrollViews.firstMatch
             } else {
-                container = app.scrollViews.firstMatch
+                // 这套 SwiftUI 不把弹层暴露成 sheet，弹层的 scrollView 在树的
+                // 最后面；取 firstMatch 会滚到背后那一页，等于白滚
+                container = app.scrollViews.lastMatch
             }
             if container.exists && container.isHittable {
                 container.swipeUp()
@@ -110,9 +112,12 @@ final class FreeRouteUITests: XCTestCase {
             // 反证：testCaptureAllScreens 用同样的点击序列后面能点到 sheet 里的
             // 「完成」按钮，说明面板本来就开着的 —— 是我的判定条件错了，
             // 于是每次重试都多点一次 moreActions，反而把状态搞乱。
-            let opened = app.descendants(matching: .any)["provider.addCustom"].firstMatch
-            if opened.waitForExistence(timeout: 6) { return }
-            print("第 \(i + 1) 次：没找到面板里的 provider.addCustom，重试")
+            // 用 sheet 顶部必在屏幕内的「完成」判定打开状态。
+            // 不能用 provider.addCustom：它在滚动内容末尾，一旦前面的用例
+            // 已经建过服务商（SwiftData 数据跨用例留存），它就被挤到屏幕外、
+            // 不进可访问性树 —— 这正是本用例独独失败的原因。
+            if app.buttons["完成"].firstMatch.waitForExistence(timeout: 6) { return }
+            print("第 \(i + 1) 次：没找到面板顶部的「完成」，重试")
             sleep2(0.8)
         }
         XCTFail("多次尝试仍无法打开「服务商管理」sheet")
