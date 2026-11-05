@@ -53,11 +53,15 @@ def from_xcresult(path="UITests.xcresult"):
     got = 0
     for item in items:
         title = item.get("title") or item.get("name") or ""
+        # manifest 里的 suggestedHumanReadableName 是 "Synthesized Event <时间>"，
+        # 只有形如 01-dashboard 的名字才可信，否则交给 blob 兜底按序号命名
+        if title and not re.match(r"^[0-9]{2}-[a-z-]+$", title):
+            title = ""
         # xcresulttool 的 manifest 字段跨版本不一致，逐个兼容
-        filename = (item.get("filename")
+        # Xcode 26.6 实测字段是 exportedFileName；attachment.name 不会进 manifest
+        filename = (item.get("exportedFileName")
+                    or item.get("filename")
                     or item.get("suggestedFileName")
-                    or (item.get("payload") or {}).get("suggestedFileName")
-                    or (item.get("payload") or {}).get("filename")
                     or "")
         if not filename:
             continue
@@ -74,25 +78,36 @@ def from_xcresult(path="UITests.xcresult"):
     return got
 
 
-def from_simulator(bundle="com.freeroute.ai"):
-    container, rc = sh(f"xcrun simctl get_app_container booted {bundle} data")
-    if rc != 0 or not container:
-        print("· 取不到模拟器沙盒（App 未安装或测试未跑）")
-        return 0
-    src = os.path.join(container, "tmp", "screenshots")
-    if not os.path.isdir(src):
-        src = os.path.join(container, "Library", "Caches", "screenshots")
-    if not os.path.isdir(src):
-        print("· 沙盒里没有 screenshots 目录")
-        return 0
-    os.makedirs(OUT, exist_ok=True)
-    n = 0
-    for f in sorted(os.listdir(src)):
-        if f.endswith(".png"):
-            shutil.copy(os.path.join(src, f), os.path.join(OUT, f))
-            n += 1
-    print(f"· 从模拟器沙盒收集 {n} 张")
-    return n
+def from_simulator():
+    """UI 测试把 PNG 按屏名写进自己的沙盒；用 simctl 找到容器直接取出来。
+    附件通道会丢掉 attachment.name，所以这条是主路径而不是兜底。"""
+    candidates = [
+        "com.freeroute.ai.uitests.runner",   # Xcode 生成的 UI 测试 runner
+        "com.freeroute.ai.uitests",
+        "com.freeroute.ai",
+    ]
+    subdirs = ["Documents/ci-screenshots", "ci-screenshots",
+               "tmp/screenshots", "Library/Caches/screenshots"]
+    for bundle in candidates:
+        container, rc = sh(f"xcrun simctl get_app_container booted {bundle} data")
+        if rc != 0 or not container:
+            continue
+        for sub in subdirs:
+            src = os.path.join(container, sub.replace("/", os.sep))
+            if not os.path.isdir(src):
+                continue
+            files = [f for f in os.listdir(src) if f.endswith(".png")]
+            if not files:
+                continue
+            os.makedirs(OUT, exist_ok=True)
+            got = 0
+            for f in files:
+                shutil.copy(os.path.join(src, f), os.path.join(OUT, f))
+                got += 1
+            print(f"· 从 {bundle}/{sub} 取到 {got} 张（按屏名）")
+            return got
+    print("· 模拟器沙盒里没有 ci-screenshots（UI 测试可能没跑）")
+    return 0
 
 
 def from_blobs(path="UITests.xcresult", limit=16):

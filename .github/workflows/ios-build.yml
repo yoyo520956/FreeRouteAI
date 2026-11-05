@@ -238,7 +238,7 @@ jobs:
           {
             echo "## 截图产出"
             if [ -d screenshots ] && [ -n "$(find screenshots -maxdepth 1 -name '*.png' -print -quit)" ]; then
-              find screenshots -maxdepth 1 -name '*.png' -printf '  - %f\n';
+              for f in screenshots/*.png; do echo "  - ${f##*/}"; done;
             else echo "- 无（UI 测试未执行或未产出附件）"; fi
             echo "- 以上如存在，均为 **iOS 模拟器**截图，不等同于真机截图。"
           } >> "$GITHUB_STEP_SUMMARY"

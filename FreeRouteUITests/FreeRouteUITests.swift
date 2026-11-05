@@ -32,6 +32,17 @@ final class FreeRouteUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+        // 附件通道会丢掉 name（xcresulttool 导出的 manifest 里全变成
+        // "Synthesized Event <时间>"），所以再把 PNG 按目标文件名写进测试 runner
+        // 自己的沙盒；CI 用 simctl 取 runner 容器即可拿到正确屏名。
+        if let data = screenshot.pngRepresentation as Data? {
+            let docs = FileManager.default.urls(for: .documentDirectory,
+                                                in: .userDomainMask).first
+            let dir = (docs ?? URL(fileURLWithPath: NSTemporaryDirectory()))
+                .appendingPathComponent("ci-screenshots", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: dir.appendingPathComponent(name + ".png"))
+        }
     }
 
     private func tab(_ title: String) {
