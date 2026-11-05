@@ -77,6 +77,7 @@ struct ProviderEditorView: View {
 
                 Section {
                     TextField("Base URL", text: $baseURL)
+                        .accessibilityIdentifier("provider.baseURL")
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .keyboardType(.URL)
                     if !baseURLValid {

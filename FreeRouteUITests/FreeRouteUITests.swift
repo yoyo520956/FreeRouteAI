@@ -117,7 +117,7 @@ final class FreeRouteUITests: XCTestCase {
         // 设置 → 打开请求日志 / 统计中心 / 安全
         openSetting("打开请求日志", shot: "07-logs")
         openSetting("打开统计中心", shot: "08-statistics")
-        openSetting("安全", shot: "09-security")
+        openSetting("安全与密钥", shot: "09-security")
     }
 
     private func openSetting(_ label: String, shot name: String) {
@@ -160,13 +160,20 @@ final class FreeRouteUITests: XCTestCase {
         sleep2(1.0)
         shot("11-provider-editor")
 
-        let nameField = app.textFields["服务商名称"]
+        let nameField = app.textFields["provider.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 6), "找不到名称输入框")
         nameField.tap()
         nameField.typeText("CI 测试源")
 
-        let urlField = app.textFields["Base URL"]
-        XCTAssertTrue(urlField.exists, "找不到 Base URL 输入框")
+        let urlField = app.textFields["provider.baseURL"]
+        // 第一屏可能看不到 Base URL（上面还有两个 Picker），滚一下
+        for _ in 0..<3 {
+            if urlField.exists && urlField.isHittable { break }
+            let table = app.tables.firstMatch
+            if table.exists { table.swipeUp() } else { app.swipeUp() }
+            sleep2(0.4)
+        }
+        XCTAssertTrue(urlField.waitForExistence(timeout: 6), "找不到 Base URL 输入框")
         urlField.tap()
         urlField.typeText("https://api.example.com/v1")
 
@@ -188,12 +195,13 @@ final class FreeRouteUITests: XCTestCase {
         tapAny("addProvider")
         sleep2(1.0)
 
-        let nameField = app.textFields["服务商名称"]
+        let nameField = app.textFields["provider.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 8), "找不到名称输入框")
         nameField.tap()
         nameField.typeText("非法地址源")
 
-        let urlField = app.textFields["Base URL"]
+        let urlField = app.textFields["provider.baseURL"]
+        XCTAssertTrue(urlField.waitForExistence(timeout: 8), "找不到 Base URL 输入框")
         urlField.tap()
         urlField.typeText("not-a-url")
 

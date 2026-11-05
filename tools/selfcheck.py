@@ -145,6 +145,22 @@ FORBIDDEN = [
     (r'\(try\?[^\n]*\)\.value\b', 'Optional 直接取 .value（应为 ?.value）'),
 ]
 
+# 同屏重复标签：Section 的行文案与区块标题同名时，读屏会连读两遍，
+# XCUITest 也会报 Multiple matching elements（本项目真实踩过：设置页两行「安全」）
+DUP_LABEL_WINDOW = 260
+
+
+def check_duplicate_section_labels(rel, code):
+    for m in re.finditer(r'header:\s*\{\s*Text\("([^"]+)"\)', code):
+        title = m.group(1)
+        lo = max(0, m.start() - DUP_LABEL_WINDOW)
+        window = code[lo:m.end() + DUP_LABEL_WINDOW]
+        for rm in re.finditer(r'label:\s*\{\s*Text\("([^"]+)"\)', window):
+            if rm.group(1) == title:
+                ln = code[:m.start()].count('\n') + 1
+                errors.append(f"{rel}:{ln} 行文案与区块标题同为「{title}」（读屏连读、UI 测试无法唯一定位，请改其一）")
+
+
 # ActivityViewContext 的可用成员（Xcode 26.6 SDK 实测：没有 activity，
 # 想要固定属性请放进 ContentState，别写 context.activity.attributes.x）
 ACTIVITY_CTX_ALLOWED = {'state', 'date', 'timing', 'inActivityContext'}
@@ -158,6 +174,7 @@ def main():
         code = strip_code(raw)
         rel = os.path.relpath(f, ROOT)
         check_balance(rel, code)
+        check_duplicate_section_labels(rel, raw)  # 必须用 raw：code 里字符串已被掩码
 
         # Live Activity 闭包里的 context 只有固定成员（CI 真实踩过：context.gatewayURL）
         if 'ActivityConfiguration' in code or 'DynamicIsland' in code:

@@ -156,7 +156,9 @@ struct SettingsView: View {
 
     private var securitySection: some View {
         Section {
-            NavigationLink { SecurityView() } label: { Text("安全") }
+            // 行文案不能与区块标题同名：读屏会连读两个「安全」，
+            // XCUITest 也会因 Multiple matching elements 无法定位
+            NavigationLink { SecurityView() } label: { Text("安全与密钥") }
         } header: {
             Text("安全")
         }
