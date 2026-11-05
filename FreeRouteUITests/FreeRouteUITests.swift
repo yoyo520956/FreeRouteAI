@@ -50,11 +50,51 @@ final class FreeRouteUITests: XCTestCase {
     /// computed Button from legacy attributes vs PopUpButton from modern attribute"），
     /// 因此一律按 accessibilityIdentifier 用 .any 查询，不假定具体类型。
     @discardableResult
+    /// 小屏（SE3 尺寸）上目标经常在屏幕外；先滚动到可点再断言，
+    /// 避免「元素存在但 tap 失败」这种难懂的报错。
+    /// sheet 里要用 sheet 自己的 scrollView，否则会滚到背后的主页。
+    private func scrollToFind(_ el: XCUIElement, tries: Int = 4) {
+        for _ in 0..<tries {
+            if el.isHittable { return }
+            let sheet = app.sheets.firstMatch
+            let container: XCUIElement
+            if sheet.exists {
+                container = sheet.scrollViews.firstMatch
+            } else {
+                container = app.scrollViews.firstMatch
+            }
+            if container.exists && container.isHittable {
+                container.swipeUp()
+            } else if app.tables.firstMatch.exists {
+                app.tables.firstMatch.swipeUp()
+            } else {
+                app.swipeUp()
+            }
+            sleep2(0.45)
+        }
+    }
+
     private func tapAny(_ identifier: String, timeout: TimeInterval = 8) -> XCUIElement {
         let el = app.descendants(matching: .any)[identifier].firstMatch
         XCTAssertTrue(el.waitForExistence(timeout: timeout),
                       "找不到可交互元素（identifier=\(identifier)）")
+        scrollToFind(el)
+        XCTAssertTrue(el.isHittable,
+                      "identifier=\(identifier) 存在但滚动后仍点不到（可能被遮挡或在屏幕外）")
         el.tap()
+        return el
+    }
+
+
+    /// 表单输入框：按 identifier 定位（SwiftUI 新 SDK 不把中文占位符暴露成 a11y label），
+    /// 滚动到可点后再聚焦。
+    private func field(_ identifier: String) -> XCUIElement {
+        let el = app.descendants(matching: .any)[identifier].firstMatch
+        XCTAssertTrue(el.waitForExistence(timeout: 8), "找不到输入框（identifier=\(identifier)）")
+        scrollToFind(el)
+        XCTAssertTrue(el.isHittable, "输入框 \(identifier) 滚动后仍点不到")
+        el.tap()
+        sleep2(0.3)
         return el
     }
 
@@ -164,24 +204,21 @@ final class FreeRouteUITests: XCTestCase {
         sleep2(1.2)
         shot("11-provider-editor")
 
-        let nameField = app.textFields["provider.name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 6), "找不到名称输入框")
-        nameField.tap()
-        nameField.typeText("CI 测试源")
+        field("provider.name").typeText("CI 测试源")
+        sleep2(0.4)
+        field("provider.baseURL").typeText("https://api.example.com/v1")
 
-        let urlField = app.textFields["provider.baseURL"]
-        // 第一屏可能看不到 Base URL（上面还有两个 Picker），滚一下
-        for _ in 0..<3 {
-            if urlField.exists && urlField.isHittable { break }
-            let table = app.tables.firstMatch
-            if table.exists { table.swipeUp() } else { app.swipeUp() }
-            sleep2(0.4)
+        // 键盘会挡住工具栏的「保存」：点导航栏标题区域收起键盘
+        // （标题居中，不会误触右侧「保存」或左侧「取消」）
+        if app.keyboards.count > 0 {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).tap()
+            sleep2(0.6)
         }
-        XCTAssertTrue(urlField.waitForExistence(timeout: 6), "找不到 Base URL 输入框")
-        urlField.tap()
-        urlField.typeText("https://api.example.com/v1")
 
-        app.buttons["保存"].tap()
+        let save = app.buttons["保存"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5), "找不到保存按钮")
+        XCTAssertTrue(save.isEnabled, "填写合法后保存按钮应可点")
+        save.tap()
         sleep2(1.2)
 
         XCTAssertTrue(app.staticTexts["CI 测试源"].exists, "保存后服务商应出现在列表")
@@ -203,15 +240,9 @@ final class FreeRouteUITests: XCTestCase {
         tapAny("provider.addCustom")
         sleep2(1.2)
 
-        let nameField = app.textFields["provider.name"]
-        XCTAssertTrue(nameField.waitForExistence(timeout: 8), "找不到名称输入框")
-        nameField.tap()
-        nameField.typeText("非法地址源")
-
-        let urlField = app.textFields["provider.baseURL"]
-        XCTAssertTrue(urlField.waitForExistence(timeout: 8), "找不到 Base URL 输入框")
-        urlField.tap()
-        urlField.typeText("not-a-url")
+        field("provider.name").typeText("非法地址源")
+        sleep2(0.4)
+        field("provider.baseURL").typeText("not-a-url")
 
         let save = app.buttons["保存"]
         XCTAssertTrue(save.exists)
