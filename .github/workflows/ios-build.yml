@@ -233,6 +233,9 @@ jobs:
             CODE_SIGNING_ALLOWED=NO
       - name: 收集截图
         if: always()
+        env:
+          # 测试跑完模拟器已关机，`booted` 不解析，必须显式传 UDID
+          SIM_UDID: ${{ steps.sim.outputs.ud }}
         run: |
           python3 tools/collect-screenshots.py || true
           {
