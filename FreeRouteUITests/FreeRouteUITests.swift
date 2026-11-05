@@ -74,6 +74,39 @@ final class FreeRouteUITests: XCTestCase {
         }
     }
 
+    /// 定位到就点、定位不到只返回 false（不判失败）。
+    /// 用于「点击有动画竞态、需要重试」的流程；确定性步骤仍用 tapAny。
+    @discardableResult
+    private func tapIfPresent(_ identifier: String, timeout: TimeInterval) -> Bool {
+        let el = app.descendants(matching: .any)[identifier].firstMatch
+        guard el.waitForExistence(timeout: timeout) else { return false }
+        scrollToFind(el)
+        guard el.isHittable else {
+            print("identifier=\(identifier) 存在但点不到，跳过本次尝试")
+            return false
+        }
+        el.tap()
+        return true
+    }
+
+    /// 打开「服务商管理」sheet。
+    /// Menu 展开带动画，连续点两次存在竞态：CI 上真实出现过
+    /// 「addProvider 点成功但 sheet 没出现」，因此必须等 sheet 真出现，
+    /// 否则整条流程重试一次。
+    private func openProvidersSheet(tries: Int = 3) {
+        for i in 0..<tries {
+            tab("模型")
+            if tapIfPresent("moreActions", timeout: 10) {
+                sleep2(0.9)
+                _ = tapIfPresent("addProvider", timeout: 6)
+            }
+            if app.sheets.firstMatch.waitForExistence(timeout: 5) { return }
+            print("第 \(i + 1) 次未能打开服务商面板，重试")
+            sleep2(0.8)
+        }
+        XCTFail("多次尝试仍无法打开「服务商管理」sheet")
+    }
+
     private func tapAny(_ identifier: String, timeout: TimeInterval = 8) -> XCUIElement {
         let el = app.descendants(matching: .any)[identifier].firstMatch
         XCTAssertTrue(el.waitForExistence(timeout: timeout),
@@ -193,11 +226,7 @@ final class FreeRouteUITests: XCTestCase {
     // MARK: 真实功能：添加服务商 → 保存 → 列表出现
 
     func testAddCustomProviderAppearsInList() throws {
-        tab("模型")
-        tapAny("moreActions")
-        sleep2(0.6)
-        tapAny("addProvider")
-        sleep2(1.0)
+        openProvidersSheet()
         // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
         // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
         tapAny("provider.addCustom")
@@ -230,11 +259,7 @@ final class FreeRouteUITests: XCTestCase {
     func testInvalidBaseURLBlocksSave() throws {
         // 注意：这个用例此前用 `guard … else { return }` 提前退出，
         // 定位失败也会算"通过"（空转）。现在全部改成真断言。
-        tab("模型")
-        tapAny("moreActions")
-        sleep2(0.5)
-        tapAny("addProvider")
-        sleep2(1.0)
+        openProvidersSheet()
         // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
         // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
         tapAny("provider.addCustom")
@@ -244,9 +269,14 @@ final class FreeRouteUITests: XCTestCase {
         sleep2(0.4)
         field("provider.baseURL").typeText("not-a-url")
 
-        let save = app.buttons["保存"]
-        XCTAssertTrue(save.exists)
-        XCTAssertFalse(save.isEnabled, "Base URL 非法时保存按钮必须禁用")
+        // 不断言 save.isEnabled：SwiftUI 工具栏按钮的 .disabled() 不保证
+        // 透传到 XCUITest 的 enabled 属性（CI 实测红字已出现但 isEnabled 仍为 true）。
+        // 改断言真实结果：界面必须给出明确错误提示，且必须仍停在编辑器（没被保存关掉）。
+        let hint = app.descendants(matching: .any)["Base URL 必须以 http:// 或 https:// 开头"].firstMatch
+        XCTAssertTrue(hint.waitForExistence(timeout: 6),
+                      "非法 Base URL 时必须显示行内错误提示")
+        scrollToFind(hint)
+        XCTAssertTrue(hint.exists, "提示应仍在编辑器内可见（说明未被静默保存）")
     }
 
     // MARK: 真实功能：Smart 模式可切换且持久

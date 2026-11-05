@@ -148,11 +148,8 @@ private struct FreeCatalogCard: View {
     }
 
     private func row(_ k: String, _ v: String) -> some View {
-        HStack(alignment: .top, spacing: 7) {
-            Text(k).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                .frame(width: 56, alignment: .leading)
-            Text(v).font(.system(size: 11)).fixedSize(horizontal: false, vertical: true)
-        }
-        .accessibilityElement(children: .combine)
+        FRKeyValueRow(k, v,
+                      keyFont: .system(size: 10, weight: .semibold),
+                      valueFont: .system(size: 11))
     }
 }

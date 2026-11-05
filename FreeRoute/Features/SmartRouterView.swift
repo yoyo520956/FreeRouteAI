@@ -4,6 +4,8 @@ import SwiftUI
 struct SmartRouterView: View {
     @Environment(AppState.self) private var app
     @Environment(AppCoordinator.self) private var coordinator
+    /// 布局只认 size class，不认机型：宽屏（iPad/横屏/Mac 宽窗）多列，窄屏两列
+    @Environment(\.horizontalSizeClass) private var hSize
 
     // 排名缓存（避免在 body 里做有副作用调用）
     @State private var ranked: [RouteScore] = []
@@ -68,7 +70,7 @@ struct SmartRouterView: View {
         FRCard {
             VStack(alignment: .leading, spacing: 10) {
                 Text("路由模式").font(.system(size: 13, weight: .semibold))
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                LazyVGrid(columns: FRLayout.grid(hSize, compact: 2, regular: 4), spacing: 8) {
                     ForEach(RouterMode.allCases) { m in
                         modeCard(m)
                     }
@@ -189,15 +191,15 @@ struct SmartRouterView: View {
     private var rankingSection: some View {
         FRCard {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
+                // 窄屏/大字号放不下时整体退成上下排（原先写死 150pt 会截断）
+                FRAdaptiveHeader(controlWidth: 150) {
                     Text("候选排名").font(.system(size: 13, weight: .semibold))
-                    Spacer()
+                } control: {
                     Picker("筛选", selection: $showAll) {
                         Text("只看待选").tag(false)
                         Text("全部").tag(true)
                     }
                     .pickerStyle(.segmented)
-                    .frame(width: 150)
                 }
                 if ranked.isEmpty {
                     FREmptyState(

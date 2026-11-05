@@ -201,20 +201,29 @@ struct ModelDetailView: View {
                                     FRBadge(reason, color: FRDesign.err)
                                 }
                             }
-                            ForEach(Array(score.parts.enumerated()), id: \.offset) { _, part in
-                                HStack(spacing: 8) {
-                                    Text(part.name).font(.system(size: 11)).frame(width: 68, alignment: .leading)
-                                    GeometryReader { geo in
-                                        ZStack(alignment: .leading) {
-                                            Capsule().fill(Color(.tertiarySystemFill)).frame(height: 5)
-                                            Capsule().fill(FRDesign.accent)
-                                                .frame(width: max(2, geo.size.width * CGFloat(part.raw)), height: 5)
+                            // 六维评分表：用 Grid 让「标签列/数值列」按内容自动对齐，
+                            // 取代原先 68pt / 38pt 两个魔数（大字号下必溢出）
+                            Grid(alignment: .center, horizontalSpacing: 8, verticalSpacing: 5) {
+                                ForEach(Array(score.parts.enumerated()), id: \.offset) { _, part in
+                                    GridRow(alignment: .center) {
+                                        Text(part.name).font(.system(size: 11))
+                                            .fixedSize()
+                                            .gridColumnAlignment(.leading)
+                                        GeometryReader { geo in
+                                            ZStack(alignment: .leading) {
+                                                Capsule().fill(Color(.tertiarySystemFill)).frame(height: 5)
+                                                Capsule().fill(FRDesign.accent)
+                                                    .frame(width: max(2, geo.size.width * CGFloat(part.raw)), height: 5)
+                                            }
                                         }
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 5)
+                                        Text(String(format: "%.2f", part.weighted))
+                                            .font(.system(size: 10, design: .monospaced))
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize()
+                                            .gridColumnAlignment(.trailing)
                                     }
-                                    .frame(height: 5)
-                                    Text(String(format: "%.2f", part.weighted))
-                                        .font(.system(size: 10, design: .monospaced))
-                                        .foregroundStyle(.secondary).frame(width: 38, alignment: .trailing)
                                 }
                             }
                             Text(score.reason).font(.system(size: 11)).foregroundStyle(.secondary)
@@ -237,13 +246,8 @@ struct ModelDetailView: View {
     // MARK: 工具
 
     private func row(_ k: String, _ v: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(k).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-                .frame(width: 64, alignment: .leading)
-            Text(v).font(.system(size: 12)).textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .accessibilityElement(children: .combine)
+        // 原来固定 64pt 标签列在超大字号/窄屏下会把值挤裁，改用两态自适应行
+        FRKeyValueRow(k, v)
     }
 
     private func healthColor(_ h: ModelHealth) -> Color {

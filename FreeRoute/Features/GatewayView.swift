@@ -203,7 +203,8 @@ struct GatewayView: View {
                         TextField("3000", text: $portText)
                             .keyboardType(.numberPad)
                             .font(.system(size: 13, design: .monospaced))
-                            .frame(width: 110)
+                            // 可收缩区间替代死宽 110pt，避免窄屏/大字号顶出卡片
+                            .frame(minWidth: 72, maxWidth: 118)
                             .padding(7)
                             .background(RoundedRectangle(cornerRadius: 8).fill(Color(.secondarySystemGroupedBackground)))
                             .onChange(of: portText) { _, _ in validatePort() }

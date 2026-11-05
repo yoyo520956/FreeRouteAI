@@ -98,7 +98,8 @@ struct SettingsView: View {
                 TextField("3000", text: $portText)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
-                    .frame(width: 90)
+                    // 给一个可收缩区间而不是死宽 90pt：超大字号下让系统能压缩它
+                    .frame(minWidth: 56, maxWidth: 96, alignment: .trailing)
                     .foregroundStyle(showPortError ? FRDesign.err : Color.primary)
             }
             Toggle("局域网访问", isOn: settings.gatewayLANEnabled)

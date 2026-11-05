@@ -287,7 +287,8 @@ struct FloatingMonitor: View {
             }
         }
         .padding(10)
-        .frame(width: 150)
+        // 悬浮监控窗：给可收缩区间，小屏（SE/放大显示）不会顶出屏幕边缘
+        .frame(minWidth: 128, maxWidth: 176)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
             .strokeBorder(FRDesign.accent.opacity(0.25), lineWidth: 1))
