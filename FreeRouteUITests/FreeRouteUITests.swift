@@ -158,6 +158,10 @@ final class FreeRouteUITests: XCTestCase {
         sleep2(0.6)
         tapAny("addProvider")
         sleep2(1.0)
+        // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
+        // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
+        tapAny("provider.addCustom")
+        sleep2(1.2)
         shot("11-provider-editor")
 
         let nameField = app.textFields["provider.name"]
@@ -194,6 +198,10 @@ final class FreeRouteUITests: XCTestCase {
         sleep2(0.5)
         tapAny("addProvider")
         sleep2(1.0)
+        // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
+        // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
+        tapAny("provider.addCustom")
+        sleep2(1.2)
 
         let nameField = app.textFields["provider.name"]
         XCTAssertTrue(nameField.waitForExistence(timeout: 8), "找不到名称输入框")

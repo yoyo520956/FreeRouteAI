@@ -130,6 +130,7 @@ struct ProvidersView: View {
                 .foregroundStyle(FRDesign.accent)
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("provider.addCustom")
 
             NavigationLink {
                 FreeCatalogView()
