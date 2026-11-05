@@ -21,6 +21,11 @@ struct ProvidersView: View {
             LazyVStack(spacing: 9) {
                 header
                 keychainHint
+                // 主操作提到最前面。原先它在 LazyVStack 末尾：LazyVStack 是懒加载，
+                // 服务商一多，「添加自定义服务商」连可访问性树都进不去
+                // （UI 测试与真人往上翻都碰不到它）。HIG 也要求最重要的东西
+                // 放在最靠上/靠前的位置。
+                addButtons
                 if app.providers.isEmpty {
                     FREmptyState(icon: "server.rack",
                                  title: "还没有服务商",
@@ -42,7 +47,6 @@ struct ProvidersView: View {
                               onDelete: { deleteTarget = p; showDeleteDialog = true })
                     }
                 }
-                addButtons
             }
             .padding(.horizontal, 12)
             .padding(.top, 6)

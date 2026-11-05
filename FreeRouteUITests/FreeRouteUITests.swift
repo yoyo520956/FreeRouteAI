@@ -247,7 +247,7 @@ final class FreeRouteUITests: XCTestCase {
         openProvidersSheet()
         // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
         // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
-        tapAny("provider.addCustom", scroll: true)
+        tapAny("provider.addCustom")
         sleep2(1.2)
         shot("11-provider-editor")
 
@@ -280,7 +280,7 @@ final class FreeRouteUITests: XCTestCase {
         openProvidersSheet()
         // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
         // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
-        tapAny("provider.addCustom", scroll: true)
+        tapAny("provider.addCustom")
         sleep2(1.2)
 
         field("provider.name").typeText("非法地址源")
