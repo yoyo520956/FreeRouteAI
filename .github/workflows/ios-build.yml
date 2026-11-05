@@ -259,6 +259,16 @@ jobs:
             UnitTests.xcresult
             UITests.xcresult
           if-no-files-found: warn
+      # 单独一份只含 IPA 的小产物：build-output 里 78MB 几乎全是 xcresult，
+      # 手机侧拉整包会超时，取件只需这一个（约 6MB）
+      - name: 步骤 10b · 单独上传 IPA
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-only
+          path: FreeRoute*.ipa
+          if-no-files-found: warn
+          retention-days: 30
       - name: 步骤 11 · 构建报告
         if: always()
         run: |
