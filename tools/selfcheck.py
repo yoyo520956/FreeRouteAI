@@ -188,6 +188,10 @@ def main():
                 errors.append(f"{rel}: 使用 Swift Charts 但未 import Charts")
 
         for pat, why in FORBIDDEN:
+            # UI 测试里 print 是标准日志通道：截图跳过等原因必须打出来，
+            # 否则缺失会被"用例通过"掩盖（真实发生过），所以不算调试残留
+            if why == 'print 调试输出' and rel.startswith('FreeRouteUITests/'):
+                continue
             m = re.search(pat, code)
             if m:
                 ln = code[:m.start()].count('\n') + 1

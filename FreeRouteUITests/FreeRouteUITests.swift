@@ -45,6 +45,19 @@ final class FreeRouteUITests: XCTestCase {
         }
     }
 
+    /// SwiftUI 的 Menu 及菜单项在 XCUITest 里的 element type 不稳定：同一个控件
+    /// 可能报 Button / PopUpButton / Cell（日志原话 "Automation type mismatch:
+    /// computed Button from legacy attributes vs PopUpButton from modern attribute"），
+    /// 因此一律按 accessibilityIdentifier 用 .any 查询，不假定具体类型。
+    @discardableResult
+    private func tapAny(_ identifier: String, timeout: TimeInterval = 8) -> XCUIElement {
+        let el = app.descendants(matching: .any)[identifier].firstMatch
+        XCTAssertTrue(el.waitForExistence(timeout: timeout),
+                      "找不到可交互元素（identifier=\(identifier)）")
+        el.tap()
+        return el
+    }
+
     private func tab(_ title: String) {
         let button = app.tabBars.buttons[title]
         XCTAssertTrue(button.waitForExistence(timeout: 10), "找不到底部标签「\(title)」")
@@ -62,18 +75,24 @@ final class FreeRouteUITests: XCTestCase {
         shot("02-models")
 
         // 服务商管理（模型中心右上角 …  → 添加服务商）
-        let more = app.buttons["ellipsis.circle"]
-        if more.waitForExistence(timeout: 5) {
+        // 用 identifier 而非 SF Symbol 名；这里允许跳过但必须打印原因，
+        // 否则截图缺失会被"测试通过"掩盖（曾真实发生过）。
+        let more = app.descendants(matching: .any)["moreActions"].firstMatch
+        if more.waitForExistence(timeout: 6) {
             more.tap()
             sleep2(0.6)
-            let providersItem = app.buttons["添加服务商"]
-            if providersItem.exists {
+            let providersItem = app.descendants(matching: .any)["addProvider"].firstMatch
+            if providersItem.waitForExistence(timeout: 5) {
                 providersItem.tap()
                 sleep2(1.0)
                 shot("03-providers")
                 app.buttons["完成"].tap()
                 sleep2(0.6)
+            } else {
+                print("⚠️ 跳过 03-providers：菜单项 addProvider 未出现")
             }
+        } else {
+            print("⚠️ 跳过 03-providers：moreActions 未出现")
         }
 
         tab("路由")
@@ -104,12 +123,21 @@ final class FreeRouteUITests: XCTestCase {
     private func openSetting(_ label: String, shot name: String) {
         tab("设置")
         let cell = app.staticTexts[label]
-        if cell.waitForExistence(timeout: 5) {
-            cell.tap()
-            sleep2(1.2)
-            shot(name)
-            back()
+        // Form 的行可能落在屏幕外（SE3 只有 4.7 寸），滚到可点为止
+        for _ in 0..<6 {
+            if cell.exists && cell.isHittable { break }
+            let table = app.tables.firstMatch
+            if table.exists { table.swipeUp() } else { app.swipeUp() }
+            sleep2(0.4)
         }
+        guard cell.waitForExistence(timeout: 4) else {
+            print("⚠️ 跳过 \(name)：设置页找不到「\(label)」")
+            return
+        }
+        cell.tap()
+        sleep2(1.2)
+        shot(name)
+        back()
     }
 
     private func back() {
@@ -126,14 +154,9 @@ final class FreeRouteUITests: XCTestCase {
 
     func testAddCustomProviderAppearsInList() throws {
         tab("模型")
-        let more = app.buttons["moreActions"]
-        guard more.waitForExistence(timeout: 8) else {
-            XCTFail("模型中心工具栏不可用（找不到 moreActions）")
-            return
-        }
-        more.tap()
+        tapAny("moreActions")
         sleep2(0.6)
-        app.buttons["添加服务商"].tap()
+        tapAny("addProvider")
         sleep2(1.0)
         shot("11-provider-editor")
 
@@ -157,16 +180,16 @@ final class FreeRouteUITests: XCTestCase {
     // MARK: 真实功能：Base URL 非法时禁止保存
 
     func testInvalidBaseURLBlocksSave() throws {
+        // 注意：这个用例此前用 `guard … else { return }` 提前退出，
+        // 定位失败也会算"通过"（空转）。现在全部改成真断言。
         tab("模型")
-        let more = app.buttons["ellipsis.circle"]
-        guard more.waitForExistence(timeout: 8) else { return }
-        more.tap()
+        tapAny("moreActions")
         sleep2(0.5)
-        app.buttons["添加服务商"].tap()
+        tapAny("addProvider")
         sleep2(1.0)
 
         let nameField = app.textFields["服务商名称"]
-        guard nameField.waitForExistence(timeout: 6) else { return }
+        XCTAssertTrue(nameField.waitForExistence(timeout: 8), "找不到名称输入框")
         nameField.tap()
         nameField.typeText("非法地址源")
 
@@ -184,10 +207,8 @@ final class FreeRouteUITests: XCTestCase {
     func testRouterModeSwitchPersists() throws {
         tab("路由")
         let target = app.staticTexts["SMART FAST"]
-        guard target.waitForExistence(timeout: 8) else {
-            XCUIDevice.shared.orientation = .portrait
-            return
-        }
+        // 定位失败必须判失败，不能静默 return（那会让用例空转通过）
+        XCTAssertTrue(target.waitForExistence(timeout: 8), "路由页找不到 SMART FAST 模式卡片")
         target.tap()
         sleep2(0.8)
         app.terminate()

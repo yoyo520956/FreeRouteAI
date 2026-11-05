@@ -71,6 +71,7 @@ struct ModelsHubView: View {
                         } label: {
                             Label("添加服务商", systemImage: "plus.circle")
                         }
+                        .accessibilityIdentifier("addProvider")
                         Button {
                             showCatalog = true
                         } label: {
@@ -81,6 +82,7 @@ struct ModelsHubView: View {
                         } label: {
                             Label("刷新全部", systemImage: "arrow.clockwise")
                         }
+                        .accessibilityIdentifier("refreshAll")
                     } label: {
                         Image(systemName: "ellipsis.circle")
                     }

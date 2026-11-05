@@ -221,7 +221,8 @@ jobs:
       - name: 步骤 9 · UI 测试（逐屏截图）
         id: uitest
         if: success() && steps.unit.outcome == 'success' && github.event.inputs.run_ui_tests != 'false'
-        continue-on-error: true
+        # 不再 continue-on-error：IPA 在步骤 7 就已产出，测试失败应该让流水线变红，
+        # 而不是把真实失败藏进绿灯里（此前真实发生过）
         run: |
           set -o pipefail
           xcodebuild test \
