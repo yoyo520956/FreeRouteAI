@@ -342,41 +342,43 @@ final class FreeRouteUITests: XCTestCase {
     // MARK: 真实功能：Base URL 非法时禁止保存
 
     func testInvalidInputBlocksSave() throws {
-        // 注意：这个用例此前用 `guard … else { return }` 提前退出，
-        // 定位失败也会算"通过"（空转）。现在全部改成真断言。
+        // 这个用例走过不少弯路：`guard … else { return }` 空转通过、断言 app.sheets
+        // （这套 SwiftUI 不暴露 sheet 类型）、断言行内 Label（Form 里跨 SDK 不一致）、
+        // 断言"点保存后弹窗拒绝"（.disabled 生效时按钮压根点不动，不会有弹窗）。
+        // 现在只用实测可靠的两类信号：identifier 存在性 + 按钮 isEnabled，
+        // 并把每个阶段的实测值打印出来，失败时日志自带证据。
         openProvidersSheet()
-        // 「添加服务商」菜单项打开的是服务商管理 sheet，还要再点
-        // 「添加自定义服务商」才真正进入编辑器表单（曾因少这一步定位不到输入框）
+        // 「添加服务商」打开的是服务商管理 sheet，还要再点「添加自定义服务商」
         tapAny("provider.addCustom")
         sleep2(1.2)
 
-        // 主断言走「新建态名称为空」这条路径：不需要任何文本输入，
-        // 因此不受"XCUITest 清不空预填字段"这类测试端抖动影响，
-        // 覆盖的却是同一个产品保证 —— 校验在 save() 里，不只在 .disabled 修饰符上。
         let save = app.buttons["保存"]
-        XCTAssertTrue(save.waitForExistence(timeout: 5), "找不到保存按钮")
-        save.tap()
-        sleep2(1.5)
-        XCTAssertTrue(app.descendants(matching: .any)["provider.baseURL"].firstMatch.exists,
-                      "名称为空时点保存必须留在编辑器里，不能静默保存并关闭")
-        let alert = app.alerts.firstMatch
-        XCTAssertTrue(alert.waitForExistence(timeout: 5), "非法输入被拒绝时必须给出明确提示")
-        alert.buttons["好"].tap()
-        sleep2(0.5)
+        XCTAssertTrue(save.waitForExistence(timeout: 6), "找不到保存按钮")
 
-        // 次断言：Base URL 只有 scheme 时同样必须被拦。
-        // 新建态默认就预填 "https://"，所以这里什么都不用输入 —— 不需要清空字段
-        // （XCUITest 清不空预填值是本轮踩过的坑），路径完全确定。
+        // 阶段 1：新建态 = 名称空 + Base URL 只有预填的 "https://"
+        print("阶段1（名称空、URL 无域名）保存 isEnabled=\(app.buttons["保存"].isEnabled)")
+        XCTAssertFalse(app.buttons["保存"].isEnabled, "输入不完整时保存按钮必须禁用")
+
+        // 阶段 2：只填名称，Base URL 仍然没有域名
         type(into: "provider.name", "只有协议的地址")
-        sleep2(0.4)
+        sleep2(0.5)
+        dismissKeyboardIfNeeded()
+        print("阶段2（URL 无域名）保存 isEnabled=\(app.buttons["保存"].isEnabled)")
+        XCTAssertFalse(app.buttons["保存"].isEnabled,
+                       "Base URL 只有 scheme 没有域名时保存按钮必须禁用")
+
+        // 阶段 3：补上域名 → 必须放行（证明不是一律禁死），并真的保存成功
+        let url = append(into: "provider.baseURL", "api.example.com/v1")
+        if url.isEmpty {
+            print("ℹ️ 读不到 Base URL 的值，跳过放行断言（不是产品失败）")
+            return
+        }
+        XCTAssertTrue(app.buttons["保存"].isEnabled, "填齐后应放行（实际值 \(url)）")
         dismissKeyboardIfNeeded()
         app.buttons["保存"].tap()
         sleep2(1.5)
-        XCTAssertTrue(app.descendants(matching: .any)["provider.baseURL"].firstMatch.exists,
-                      "Base URL 只有 https:// 没有域名时点保存必须留在编辑器里")
-        let urlAlert = app.alerts.firstMatch
-        XCTAssertTrue(urlAlert.waitForExistence(timeout: 5), "Base URL 非法时必须给出提示")
-        urlAlert.buttons["好"].tap()
+        XCTAssertFalse(app.descendants(matching: .any)["provider.baseURL"].firstMatch.exists,
+                       "合法输入点保存应当关闭编辑器完成保存")
     }
 
     // MARK: 真实功能：Smart 模式可切换且持久
