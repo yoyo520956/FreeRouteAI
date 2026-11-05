@@ -105,8 +105,14 @@ final class FreeRouteUITests: XCTestCase {
             }
             sleep2(1.0)
             _ = tapIfPresent("addProvider", timeout: 5)
-            if app.sheets.firstMatch.waitForExistence(timeout: 5) { return }
-            print("第 \(i + 1) 次：点了添加服务商但 sheet 没出现，重试")
+            // 判断「面板打开了」必须用面板自己的控件，不能用 app.sheets：
+            // 这套 SwiftUI 的呈现层级在 XCUITest 里不一定暴露成 sheet 类型。
+            // 反证：testCaptureAllScreens 用同样的点击序列后面能点到 sheet 里的
+            // 「完成」按钮，说明面板本来就开着的 —— 是我的判定条件错了，
+            // 于是每次重试都多点一次 moreActions，反而把状态搞乱。
+            let opened = app.descendants(matching: .any)["provider.addCustom"].firstMatch
+            if opened.waitForExistence(timeout: 6) { return }
+            print("第 \(i + 1) 次：没找到面板里的 provider.addCustom，重试")
             sleep2(0.8)
         }
         XCTFail("多次尝试仍无法打开「服务商管理」sheet")
