@@ -54,8 +54,8 @@ extension ToolEngine {
         let w = int(kCGImagePropertyPixelWidth) ?? 0
         let h = int(kCGImagePropertyPixelHeight) ?? 0
         let orientation = int(kCGImagePropertyOrientation) ?? 1
-        let fmtID = props[kCGImagePropertyFileNumber] as? Int
-        let fmt = fmtID.map { UTType($0)?.preferredFilenameExtension ?? "未知" } ?? "未知"
+        let uti = CGImageSourceGetType(src) as String? ?? ""
+        let fmt = uti.isEmpty ? "未知" : (UTType(uti)?.preferredFilenameExtension ?? uti)
         let dpi = (props[kCGImagePropertyDPIWidth] as? NSNumber)?.doubleValue ?? 0
         let dpiH = (props[kCGImagePropertyDPIHeight] as? NSNumber)?.doubleValue ?? 0
         return "ImageIO CGImageSource 真实读取\n文件：\(url.lastPathComponent)\n字节数：\(data.count)\n像素：\(w) × \(h)\n格式：\(fmt)\n方向：\(orientation)\nDPI：\(String(format: "%.1f", dpi)) × \(String(format: "%.1f", dpiH))"
@@ -72,7 +72,7 @@ extension ToolEngine {
         let data = try Data(contentsOf: url)
         guard let src = CGImageSourceCreateWithData(data as CFData, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
-              let w = (props[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue, w > 0 else {
+              let w = (props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, w > 0 else {
             throw ToolRuntimeError.failed("该文件不是可解码的图片")
         }
         guard let vm = ctx.visualModel else {
