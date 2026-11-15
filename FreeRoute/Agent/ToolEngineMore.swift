@@ -479,11 +479,16 @@ extension ToolEngine {
 // MARK: - JS 沙箱辅助
 
 /// 极简 console 对象代理：收集 log/warn/error 输出，随结果一并返回。
-private final class JSConsole: NSObject, JSObjectProxy {
+/// 使用 @objc 导出方法给 JSContext 调用。
+private final class JSConsole: NSObject {
     var buffer = ""
-    func handle(with selector: Selector, arguments: [Any]?) -> Any? {
-        let line = (arguments ?? []).compactMap { $0 as? String }.joined(separator: " ")
-        buffer += (line.isEmpty ? "(blank)" : line) + "\n"
-        return nil
+    @objc func log(_ args: JSValue) {
+        buffer += args.toString() + "\n"
+    }
+    @objc func warn(_ args: JSValue) {
+        buffer += "⚠️ " + args.toString() + "\n"
+    }
+    @objc func error(_ args: JSValue) {
+        buffer += "❌ " + args.toString() + "\n"
     }
 }

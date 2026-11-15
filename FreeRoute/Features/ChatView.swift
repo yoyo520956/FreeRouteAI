@@ -497,21 +497,3 @@ extension ToolCallTurn {
         arguments.jsonString
     }
 }
-
-extension JSONValue {
-    var jsonString: String {
-        switch self {
-        case .null: return "null"
-        case .bool(let b): return b ? "true" : "false"
-        case .number(let n): return String(n)
-        case .string(let s): return "\"\(s.replacingOccurrences(of: "\"", with: "\\\""))\""
-        case .array(let a): return "[" + a.map { $0.jsonString }.joined(separator: ", ") + "]"
-        case .object(let o): return "{" + o.map { "\"\($0.key)\": \($0.value.jsonString)" }.joined(separator: ", ") + "}"
-        }
-    }
-    
-    subscript(string key: String) -> JSONValue? {
-        guard case .object(let o) = self else { return nil }
-        return o[key]
-    }
-}
