@@ -153,13 +153,13 @@ public struct OpenAICompatibleAdapter: ProtocolAdapter {
         var toolCalls: [ToolCallTurn] = []
         if case .array(let choices)? = root["choices"], let first = choices.first {
             if case .string(let c)? = first["text"] { text = c }
-            if let msg = first["message"]?.object {
-                text = msg["content"]?.string ?? ""
-                if case .array(let tcs)? = msg["tool_calls"] {
+            if let msgObj = first["message"]?.object {
+                text = msgObj["content"]?.string ?? ""
+                if case .array(let tcs)? = msgObj["tool_calls"] {
                     for item in tcs {
-                        guard case .object(let fn)? = item["function"]?.object else { continue }
-                        let name = fn["name"]?.string ?? ""
-                        let argsText = fn["arguments"]?.string ?? "{}"
+                        guard let fnObj = item["function"]?.object else { continue }
+                        let name = fnObj["name"]?.string ?? ""
+                        let argsText = fnObj["arguments"]?.string ?? "{}"
                         let args = JSONValue.parse(argsText) ?? .object([:])
                         let cid = item["id"]?.string ?? UUID().uuidString
                         toolCalls.append(ToolCallTurn(id: cid, name: name, arguments: args))
@@ -169,12 +169,12 @@ public struct OpenAICompatibleAdapter: ProtocolAdapter {
             finish = first["finish_reason"]?.string
         }
         var usage: UsageInfo?
-        if let u = root["usage"]?.object {
+        if let uObj = root["usage"]?.object {
             usage = UsageInfo(
-                promptTokens: FRJSON.int(u["prompt_tokens"]) ?? 0,
-                completionTokens: FRJSON.int(u["completion_tokens"]) ?? 0,
-                totalTokens: FRJSON.int(u["total_tokens"]) ?? 0,
-                cachedTokens: FRJSON.int(u["prompt_tokens_details"]?.object?["cached_tokens"]) ?? 0
+                promptTokens: FRJSON.int(uObj["prompt_tokens"]) ?? 0,
+                completionTokens: FRJSON.int(uObj["completion_tokens"]) ?? 0,
+                totalTokens: FRJSON.int(uObj["total_tokens"]) ?? 0,
+                cachedTokens: FRJSON.int(uObj["prompt_tokens_details"]?.object.flatMap { $0["cached_tokens"] }) ?? 0
             )
         }
         return ChatResponse(id: id, model: model, providerName: provider.name, text: text,
@@ -190,22 +190,22 @@ public struct OpenAICompatibleAdapter: ProtocolAdapter {
 
         var piece = StreamPiece()
         if case .array(let choices)? = root["choices"], let first = choices.first {
-            if let delta = first["delta"]?.object {
+            if let deltaObj = first["delta"]?.object {
                 // 部分服务商把推理内容放在 reasoning / reasoning_content
-                piece.text = delta["content"]?.string
-                    ?? delta["reasoning_content"]?.string
-                    ?? delta["reasoning"]?.string
+                piece.text = deltaObj["content"]?.string
+                    ?? deltaObj["reasoning_content"]?.string
+                    ?? deltaObj["reasoning"]?.string
                     ?? ""
             } else if case .string(let t)? = first["text"] {
                 piece.text = t
             }
             piece.finish = first["finish_reason"]?.string
         }
-        if let u = root["usage"]?.object {
+        if let uObj = root["usage"]?.object {
             piece.usage = UsageInfo(
-                promptTokens: FRJSON.int(u["prompt_tokens"]) ?? 0,
-                completionTokens: FRJSON.int(u["completion_tokens"]) ?? 0,
-                totalTokens: FRJSON.int(u["total_tokens"]) ?? 0
+                promptTokens: FRJSON.int(uObj["prompt_tokens"]) ?? 0,
+                completionTokens: FRJSON.int(uObj["completion_tokens"]) ?? 0,
+                totalTokens: FRJSON.int(uObj["total_tokens"]) ?? 0
             )
         }
         if let err = root["error"]?.object {

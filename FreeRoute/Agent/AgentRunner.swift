@@ -15,6 +15,7 @@ public struct AgentRunConfig: Sendable {
     public var toolTimeout: TimeInterval = 30
     public var includeTools: Bool = true         // 是否在请求中透传 tools
     public var systemPrompt: String?             // 额外注入的 system 提示（可空）
+    public var stream: Bool = false              // 是否启用 SSE 流式输出
     public var pinned: ModelInfo?                // 已解析的目标模型（避免每轮重复路由）
     public var cancellation: Task<Void, Never>?  // 外部取消信号（可空）
 
@@ -22,12 +23,12 @@ public struct AgentRunConfig: Sendable {
                 goal: String, model: String, messages: [ChatMessage], protocolType: ProviderProtocolType,
                 ctx: ToolContext, maxSteps: Int = 20, maxResultChars: Int = 8000,
                 toolTimeout: TimeInterval = 30, includeTools: Bool = true, systemPrompt: String? = nil,
-                pinned: ModelInfo? = nil, cancellation: Task<Void, Never>? = nil) {
+                stream: Bool = false, pinned: ModelInfo? = nil, cancellation: Task<Void, Never>? = nil) {
         self.taskId = taskId; self.goal = goal; self.model = model; self.messages = messages
         self.protocolType = protocolType; self.ctx = ctx
         self.maxSteps = maxSteps; self.maxResultChars = maxResultChars
         self.toolTimeout = toolTimeout; self.includeTools = includeTools
-        self.systemPrompt = systemPrompt; self.pinned = pinned; self.cancellation = cancellation
+        self.systemPrompt = systemPrompt; self.stream = stream; self.pinned = pinned; self.cancellation = cancellation
     }
 }
 
@@ -58,6 +59,24 @@ public struct AgentRunResult: Sendable {
         self.steps = steps; self.events = events
         self.toolCallCount = toolCallCount; self.modelCallCount = modelCallCount
         self.durationMs = durationMs; self.startedAt = startedAt; self.finishedAt = finishedAt
+    }
+
+    /// 报告用 JSON（供 /v1/agent/tasks/{id} 返回）
+    public var reportJSON: [String: Any] {
+        [
+            "task_id": taskId,
+            "goal": goal,
+            "status": status.rawValue,
+            "created_at": AgentTime.iso(startedAt),
+            "finished_at": AgentTime.iso(finishedAt),
+            "duration_ms": durationMs,
+            "final_answer": finalAnswer,
+            "error": error as Any,
+            "tool_call_count": toolCallCount,
+            "model_call_count": modelCallCount,
+            "steps": steps.map { $0.asJSONObject },
+            "events": events.map { $0.asJSONObject }
+        ]
     }
 }
 

@@ -132,13 +132,12 @@ public struct GeminiAdapter: ProtocolAdapter {
             if case .array(let arr) = toolsVal {
                 var decls: [JSONValue] = []
                 for item in arr {
-                    if case .object(let fn)? = item["function"]?.object,
-                       let name = fn["name"]?.string {
-                        var decl: [String: JSONValue] = ["name": .string(name)]
-                        if let desc = fn["description"]?.string { decl["description"] = .string(desc) }
-                        if let params = fn["parameters"] { decl["parameters"] = params }
-                        decls.append(.object(decl))
-                    }
+                    guard let fnObj = item["function"]?.object,
+                          let name = fnObj["name"]?.string else { continue }
+                    var decl: [String: JSONValue] = ["name": .string(name)]
+                    if let desc = fnObj["description"]?.string { decl["description"] = .string(desc) }
+                    if let params = fnObj["parameters"] { decl["parameters"] = params }
+                    decls.append(.object(decl))
                 }
                 if !decls.isEmpty {
                     body["tools"] = .array([.object(["functionDeclarations": .array(decls)])])
@@ -156,18 +155,20 @@ public struct GeminiAdapter: ProtocolAdapter {
 
     public func parseChat(provider: Provider, data: Data) throws -> ChatResponse {
         guard let root = FRJSON.object(data) else { throw UpstreamError.decoding("Gemini 响应不是 JSON 对象") }
-        if let err = root["error"]?.object, let msg = err["message"]?.string {
-            throw UpstreamError.http(status: FRJSON.int(err["code"]) ?? 400, message: msg)
+        if let errObj = root["error"]?.object,
+           let msg = errObj["message"]?.string {
+            throw UpstreamError.http(status: FRJSON.int(errObj["code"]) ?? 400, message: msg)
         }
         var text = ""
         var toolCalls: [ToolCallTurn] = []
         if case .array(let cands)? = root["candidates"], let first = cands.first {
-            if case .array(let parts)? = first["content"]?.object?["parts"] {
+            if let contentObj = first["content"]?.object,
+               case .array(let parts)? = contentObj["parts"] {
                 for p in parts {
                     text += p["text"]?.string ?? ""
-                    if let fc = p["functionCall"]?.object,
-                       let name = fc["name"]?.string {
-                        let args = fc["args"] ?? .object([:])
+                    if let fcObj = p["functionCall"]?.object,
+                       let name = fcObj["name"]?.string {
+                        let args = fcObj["args"] ?? .object([:])
                         toolCalls.append(ToolCallTurn(id: UUID().uuidString, name: name, arguments: args))
                     }
                 }
@@ -201,13 +202,14 @@ public struct GeminiAdapter: ProtocolAdapter {
     private func handle(root: [String: JSONValue]) -> StreamPiece? {
         var piece = StreamPiece()
         if case .array(let cands)? = root["candidates"], let first = cands.first {
-            if case .array(let parts)? = first["content"]?.object?["parts"] {
+            if let contentObj = first["content"]?.object,
+               case .array(let parts)? = contentObj["parts"] {
                 for p in parts {
                     piece.text += p["text"]?.string ?? ""
-                    if let fc = p["functionCall"]?.object,
-                       let name = fc["name"]?.string {
+                    if let fcObj = p["functionCall"]?.object,
+                       let name = fcObj["name"]?.string {
                         // 流式 functionCall 打包为单独的 JSON 字符串，前端按需解析
-                        let args = fc["args"] ?? .object([:])
+                        let args = fcObj["args"] ?? .object([:])
                         let tc = ToolCallTurn(id: UUID().uuidString, name: name, arguments: args)
                         piece.text += "[TOOL_CALL]" + tc.id + "|" + tc.name + "|" + tc.arguments.jsonString + "[/TOOL_CALL]"
                     }

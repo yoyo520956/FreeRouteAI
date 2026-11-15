@@ -89,7 +89,7 @@ public struct OllamaAdapter: ProtocolAdapter {
     public func parseChat(provider: Provider, data: Data) throws -> ChatResponse {
         guard let root = FRJSON.object(data) else { throw UpstreamError.decoding("Ollama 响应不是 JSON 对象") }
         if let err = root["error"]?.string { throw UpstreamError.http(status: 400, message: err) }
-        let text = root["message"]?.object?["content"]?.string ?? root["response"]?.string ?? ""
+        let text = root["message"]?.object.flatMap { $0["content"]?.string } ?? root["response"]?.string ?? ""
         let inp = FRJSON.int(root["prompt_eval_count"]) ?? 0
         let outp = FRJSON.int(root["eval_count"]) ?? 0
         let usage = (inp + outp) > 0
@@ -97,8 +97,8 @@ public struct OllamaAdapter: ProtocolAdapter {
             : nil
         // tool_calls（OpenAI 兼容格式）
         var toolCalls: [ToolCallTurn] = []
-        if case .object(let msg)? = root["message"]?.object,
-           case .array(let tcs)? = msg["tool_calls"] {
+        if let msgObj = root["message"]?.object,
+           case .array(let tcs)? = msgObj["tool_calls"] {
             for item in tcs {
                 guard case .object(let fn)? = item["function"]?.object else { continue }
                 let name = fn["name"]?.string ?? ""
@@ -124,7 +124,7 @@ public struct OllamaAdapter: ProtocolAdapter {
         guard let root = FRJSON.object(Data(s.utf8)) else { return nil }
 
         var piece = StreamPiece()
-        piece.text = root["message"]?.object?["content"]?.string ?? root["response"]?.string ?? ""
+        piece.text = root["message"]?.object.flatMap { $0["content"]?.string } ?? root["response"]?.string ?? ""
         let done = root["done"]?.bool ?? false
         let inp = FRJSON.int(root["prompt_eval_count"]) ?? 0
         let outp = FRJSON.int(root["eval_count"]) ?? 0
