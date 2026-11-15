@@ -22,16 +22,24 @@ public struct AgentContextFactory {
     @MainActor
     public static func makeContext(from app: AppState) -> ToolContext {
         var ctx = ToolContext()
-        ctx.authorizedRoot = AuthorizedFiles.root().path
+        ctx.authorizedRoot = (try? AuthorizedFiles.root().path) ?? ""
         ctx.sessionCount = app.gateway.status.connectionCount // 近似：网关连接数
         ctx.recentLogs = app.recentLogs.prefix(50).map { log in
-            "[\(log.status)] \(log.model) \(log.latencyMs)ms \(log.promptTokens + log.completionTokens)tok"
+            "[\(log.httpStatus)] \(log.modelID) \(log.durationMs)ms \(log.promptTokens + log.completionTokens)tok"
         }
         ctx.modelNames = app.models.map { "\($0.providerName)/\($0.modelID)" }
         ctx.tokenSnapshot = Dictionary(uniqueKeysWithValues:
-            app.recentLogs.suffix(20).map { ($0.model, "\($0.promptTokens + $0.completionTokens) tok") }
+            app.recentLogs.suffix(20).map { ($0.modelID, "\($0.promptTokens + $0.completionTokens) tok") }
         )
-        ctx.gatewaySnapshot = app.gateway.status
+        // gatewaySnapshot 是 [String: String]，从 GatewayStatus 结构体提取关键字段
+        let gs = app.gateway.status
+        ctx.gatewaySnapshot = [
+            "isRunning": "\(gs.isRunning)",
+            "port": "\(gs.port)",
+            "lanEnabled": "\(gs.lanEnabled)",
+            "connectionCount": "\(gs.connectionCount)",
+            "totalRequests": "\(gs.totalRequests)"
+        ]
         ctx.approvedDevices = ToolPermissionStore().devices().filter { $0.approved }
         ctx.allowedPermissions = ToolPermissionStore().enabledPermissions
         ctx.allowPrivateHTTP = ToolPermissionStore().allowPrivateHTTP
@@ -44,7 +52,7 @@ public struct AgentContextFactory {
         if let vis = app.models.first(where: { $0.capabilities.contains(.vision) }),
            let prov = app.providers.first(where: { $0.id == vis.providerID }),
            let keyRef = prov.keys.first(where: { $0.status == .healthy || $0.status == .unknown || $0.status == .rateLimited }),
-           let apiKey = try? app.keychain.get(keyRef) {
+           let apiKey = try? app.keychain.get(keyRef.keychainRef) {
             // 判断协议类型，构造端点
             let base = prov.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("/") ?
                 String(prov.baseURL.dropLast()) : prov.baseURL

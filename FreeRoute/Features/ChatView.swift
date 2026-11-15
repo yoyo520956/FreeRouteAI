@@ -167,7 +167,7 @@ struct ChatView: View {
                              "function": ["name": c.name, "arguments": c.arguments.jsonString]]
                         }
                     }
-                    if let tr = m.toolResult {
+                    if let tr = m.toolResults?.first {
                         dict["role"] = "tool"
                         dict["tool_call_id"] = tr.callId
                         dict["name"] = tr.name
