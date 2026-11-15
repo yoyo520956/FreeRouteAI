@@ -100,9 +100,9 @@ public struct OllamaAdapter: ProtocolAdapter {
         if let msgObj = root["message"]?.object,
            case .array(let tcs)? = msgObj["tool_calls"] {
             for item in tcs {
-                guard case .object(let fn)? = item["function"]?.object else { continue }
-                let name = fn["name"]?.string ?? ""
-                let argsText = fn["arguments"]?.string ?? "{}"
+                guard let fnObj = item["function"]?.object else { continue }
+                let name = fnObj["name"]?.string ?? ""
+                let argsText = fnObj["arguments"]?.string ?? "{}"
                 let args = JSONValue.parse(argsText) ?? .object([:])
                 let cid = item["id"]?.string ?? UUID().uuidString
                 toolCalls.append(ToolCallTurn(id: cid, name: name, arguments: args))
