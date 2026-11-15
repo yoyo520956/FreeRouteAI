@@ -203,7 +203,7 @@ struct ChatView: View {
                     return dict
                 }
 
-                let body: [String: Any] = [
+                var body: [String: Any] = [
                     "model": initialModel,
                     "messages": history,
                     "stream": true,
