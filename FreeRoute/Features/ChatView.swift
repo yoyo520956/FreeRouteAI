@@ -224,7 +224,7 @@ struct ChatView: View {
                                             if let args = fn["arguments"] as? String {
                                                 // 增量拼接
                                                 var existing = ""
-                                                if case .string(let s)? = currentToolCalls[idx].arguments[string: "raw"] {
+                                                if case .string(let s)? = currentToolCalls[idx].arguments[key: "raw"] {
                                                     existing = s
                                                 }
                                                 let merged = existing + args
