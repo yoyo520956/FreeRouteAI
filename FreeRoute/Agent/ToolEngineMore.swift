@@ -403,7 +403,7 @@ extension ToolEngine {
         guard let u2 = find(to) else {
             throw ToolRuntimeError.unsupported("未知目标单位「\(to)」。支持：\(supported)")
         }
-        if !u1.isCompatible(with: u2) {
+        if type(of: u1) != type(of: u2) {
             throw ToolRuntimeError.invalid("\(from)（\(u1.symbol)）与 \(to)（\(u2.symbol)）量纲不同，无法换算")
         }
         let baseFrom = u2.converter.baseUnitValue(fromValue: value)
