@@ -34,7 +34,8 @@ extension ToolEngine {
         }
         var lines: [String] = []
         for case let t as VNRecognizedTextObservation in obs {
-            lines.append("\(String(format: "%.2f", t.confidence))\t\(t.topLevelString)")
+            let best = t.topCandidates(1).first?.string ?? ""
+            lines.append("\(String(format: "%.2f", t.confidence))\t\(best)")
         }
         lines.sort { ($0 as NSString).substring(to: 5).compare(($1 as NSString).substring(to: 5)) == .orderedDescending }
         let text = lines.map { ($0 as NSString).replacingOccurrences(of: "\t", with: ": ") }.joined(separator: "\n")
@@ -53,7 +54,7 @@ extension ToolEngine {
         let w = int(kCGImagePropertyPixelWidth) ?? 0
         let h = int(kCGImagePropertyPixelHeight) ?? 0
         let orientation = int(kCGImagePropertyOrientation) ?? 1
-        let fmtID = props[kCGImagePropertyFormat] as? Int
+        let fmtID = props[kCGImagePropertyFileNumber] as? Int
         let fmt = fmtID.map { UTType($0)?.preferredFilenameExtension ?? "未知" } ?? "未知"
         let dpi = (props[kCGImagePropertyDPIWidth] as? NSNumber)?.doubleValue ?? 0
         let dpiH = (props[kCGImagePropertyDPIHeight] as? NSNumber)?.doubleValue ?? 0
@@ -325,7 +326,7 @@ extension ToolEngine {
         guard let fromTz = TimeZone(identifier: fromName) else { throw ToolRuntimeError.invalid("未知 IANA 时区：\(fromName)") }
         guard let toTz = TimeZone(identifier: toName) else { throw ToolRuntimeError.invalid("未知 IANA 时区：\(toName)") }
         var date: Date?
-        for opts in [[ISO8601DateFormatter.Options.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]] {
+        for opts in [[.withInternetDateTime.union(.withFractionalSeconds), .withInternetDateTime]] as [ISO8601DateFormatter.Options] {
             let f = ISO8601DateFormatter(); f.formatOptions = opts
             if let d = f.date(from: dateStr) { date = d; break }
         }
@@ -402,10 +403,11 @@ extension ToolEngine {
         guard let u2 = find(to) else {
             throw ToolRuntimeError.unsupported("未知目标单位「\(to)」。支持：\(supported)")
         }
-        guard u1.isCompatible(with: u2) else {
+        if !u1.isCompatible(with: u2) {
             throw ToolRuntimeError.invalid("\(from)（\(u1.symbol)）与 \(to)（\(u2.symbol)）量纲不同，无法换算")
         }
-        let converted = u1.converter.value(fromBaseUnitValue: u2.converter.baseUnitValue(fromValue: value))
+        let baseFrom = u2.converter.baseUnitValue(fromValue: value)
+        let converted = u1.converter.value(fromBaseUnitValue: baseFrom)
         return "Foundation Unit/Dimension 真实换算\n\(value) \(from) = \(String(format: "%.6g", converted)) \(to)"
     }
 
