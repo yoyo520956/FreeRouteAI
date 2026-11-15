@@ -138,7 +138,9 @@ public final class GatewayController {
         case ("POST", "/v1/chat/completions"):
             // Agent 模式检测：Header X-FreeRoute-Agent: 1 或 body.freeroute.agent=true
             let isAgent = req.headers["x-freeroute-agent"] == "1"
-                || (try? JSONSerialization.jsonObject(with: req.body)) as? [String: Any]?["freeroute"]?["agent"] as? Bool == true
+                || (try? JSONSerialization.jsonObject(with: req.body) as? [String: Any])?
+                    .flatMap { $0["freeroute"] as? [String: Any] }?
+                    .flatMap { $0["agent"] as? Bool } == true
             if isAgent {
                 await agentChatCompletions(req, app: app, ex: ex)
             } else {
