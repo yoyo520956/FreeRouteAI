@@ -18,6 +18,8 @@ struct ChatView: View {
     @State private var showError = false
     @State private var scrollProxy: ScrollViewProxy?
     @State private var cancellableToken = UUID()
+    @State private var availablePrompts: [StoredPrompt] = []
+    @State private var selectedPrompt: String?
 
     private var gatewayToken: String { app.gatewayToken }
     private var gatewayBase: String { app.gateway.status.loopbackAddress }
@@ -92,6 +94,30 @@ struct ChatView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     if isStreaming {
                         ProgressView().controlSize(.small)
+                    } else {
+                        Menu {
+                            Button {
+                                selectedPrompt = nil
+                            } label: {
+                                Label(selectedPrompt == nil ? "不使用 Prompt" : "不使用 Prompt",
+                                      systemImage: selectedPrompt == nil ? "checkmark" : "circle")
+                            }
+                            if availablePrompts.isEmpty {
+                                Text("尚无 Prompt（设置 → 数据 → Prompt 模板）")
+                            } else {
+                                Divider()
+                                ForEach(availablePrompts) { p in
+                                    Button {
+                                        selectedPrompt = p.name
+                                    } label: {
+                                        Label(p.name, systemImage: selectedPrompt == p.name ? "checkmark" : "text.bubble")
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: selectedPrompt == nil ? "text.bubble" : "text.bubble.fill")
+                        }
+                        .accessibilityLabel(selectedPrompt.map { "当前 Prompt：\($0)" } ?? "选择 Prompt")
                     }
                 }
             }
@@ -112,6 +138,7 @@ struct ChatView: View {
     // MARK: 初始化
 
     private func setupInitial() async {
+        availablePrompts = PromptStore().all()
         if let initial = initialMessages {
             messages = initial.map { ChatDisplayMessage(from: $0) }
         } else {
@@ -182,6 +209,7 @@ struct ChatView: View {
                     "stream": true,
                     "freeroute": ["agent": true]
                 ]
+                if let p = selectedPrompt { body["prompt"] = p }
                 req.httpBody = try JSONSerialization.data(withJSONObject: body)
 
                 let (stream, resp) = try await URLSession.shared.bytes(for: req)

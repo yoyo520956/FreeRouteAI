@@ -167,6 +167,7 @@ struct SettingsView: View {
 
     private var dataSection: some View {
         Section {
+            NavigationLink { PromptManagerView() } label: { Text("Prompt 模板") }
             NavigationLink { BackupView() } label: { Text("备份 / 恢复") }
         } header: {
             Text("数据")

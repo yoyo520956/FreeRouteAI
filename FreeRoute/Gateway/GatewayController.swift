@@ -179,7 +179,10 @@ public final class GatewayController {
             } else if path == "/v1/gateway/status" {
                 gatewayStatus(app: app, ex: ex)
             } else if path == "/v1/prompts" {
-                listPrompts(app: app, ex: ex)
+                listPrompts(ex: ex)
+            } else if path.hasPrefix("/v1/prompts/") {
+                let pid = String(path.dropFirst("/v1/prompts/".count))
+                getPrompt(pid, ex: ex)
             } else {
                 ex.error("未知接口 \(req.method) \(req.path)", status: 404, type: "not_found_error")
             }
@@ -190,6 +193,15 @@ public final class GatewayController {
             } else if path.hasPrefix("/v1/agent/tasks/"), path.hasSuffix("/cancel") {
                 let taskId = String(path.dropFirst("/v1/agent/tasks/".count).dropLast("/cancel".count))
                 await cancelAgentTask(taskId, app: app, ex: ex)
+            } else if path == "/v1/prompts" {
+                upsertPrompt(req, ex: ex)
+            } else {
+                ex.error("未知接口 \(req.method) \(req.path)", status: 404, type: "not_found_error")
+            }
+        case ("DELETE", _):
+            if path.hasPrefix("/v1/prompts/") {
+                let pid = String(path.dropFirst("/v1/prompts/".count))
+                deletePrompt(pid, ex: ex)
             } else {
                 ex.error("未知接口 \(req.method) \(req.path)", status: 404, type: "not_found_error")
             }
@@ -552,6 +564,17 @@ public final class GatewayController {
         // 构建 ToolContext（真实执行上下文）
         let ctx = AgentContextFactory.makeContext(from: app)
 
+        // prompt 引用解析：按名从 PromptStore 取内容，与 systemPrompt 合并
+        var resolvedSystem = input.systemPrompt ?? ""
+        if let pname = input.prompt, !pname.isEmpty {
+            if let saved = PromptStore().find(name: pname) {
+                resolvedSystem = resolvedSystem.isEmpty ? saved.content : saved.content + "\n\n" + resolvedSystem
+            } else {
+                ex.error("找不到 prompt「\(pname)」。可先 GET /v1/prompts 查看已保存列表，或用 POST /v1/prompts 创建", status: 404, type: "not_found_error")
+                return
+            }
+        }
+
         let config = AgentRunConfig(
             goal: input.goal ?? "用户请求",
             model: input.model,
@@ -562,14 +585,15 @@ public final class GatewayController {
             maxResultChars: input.maxResultChars ?? 8000,
             toolTimeout: input.toolTimeout ?? 30,
             includeTools: input.includeTools ?? true,
-            systemPrompt: input.systemPrompt,
+            systemPrompt: resolvedSystem.isEmpty ? nil : resolvedSystem,
+            stream: input.stream ?? false,
             pinned: AgentModelResolver.resolve(input.model, in: app).providerID.flatMap { pid in
                 app.models.first { $0.providerID == pid && $0.modelID == AgentModelResolver.resolve(input.model, in: app).modelID }
             }
         )
 
         let runner = AgentRunner()
-        if config.stream ?? false {
+        if config.stream {
             ex.beginSSE()
             let id = "agent-" + GatewayUtil.shortID()
             let created = Int(Date().timeIntervalSince1970)
@@ -643,12 +667,23 @@ public final class GatewayController {
             }
             return ChatMessage(role: role, content: m.content?.text ?? "")
         }
+        // prompt 引用解析（与 chat completions 同一份 PromptStore）
+        var resolvedSystem = input.systemPrompt ?? ""
+        if let pname = input.prompt, !pname.isEmpty {
+            if let saved = PromptStore().find(name: pname) {
+                resolvedSystem = resolvedSystem.isEmpty ? saved.content : saved.content + "\n\n" + resolvedSystem
+            } else {
+                ex.error("找不到 prompt「\(pname)」。先 GET /v1/prompts 查看已保存列表", status: 404, type: "not_found_error")
+                return
+            }
+        }
         let config = AgentRunConfig(
             taskId: taskId, goal: input.goal ?? "用户请求",
             model: input.model, messages: messages, protocolType: .openaiCompatible,
             ctx: ctx, maxSteps: input.maxSteps ?? 20, maxResultChars: input.maxResultChars ?? 8000,
             toolTimeout: input.toolTimeout ?? 30, includeTools: input.includeTools ?? true,
-            systemPrompt: input.systemPrompt,
+            systemPrompt: resolvedSystem.isEmpty ? nil : resolvedSystem,
+            stream: input.stream ?? false,
             pinned: AgentModelResolver.resolve(input.model, in: app).providerID.flatMap { pid in
                 app.models.first { $0.providerID == pid && $0.modelID == AgentModelResolver.resolve(input.model, in: app).modelID }
             },
@@ -819,9 +854,51 @@ public final class GatewayController {
 
     // MARK: GET /v1/prompts
 
-    private func listPrompts(app: AppState, ex: HTTPExchange) {
-        // 占位：后续接 PromptStore
-        ex.json(["object": "list", "data": [], "count": 0])
+    private func listPrompts(ex: HTTPExchange) {
+        let list = PromptStore().all()
+        ex.json(["object": "list", "data": list.map { $0.asJSONObject }, "count": list.count])
+    }
+
+    // MARK: GET /v1/prompts/{id}
+
+    private func getPrompt(_ id: String, ex: HTTPExchange) {
+        guard let p = PromptStore().all().first(where: { $0.id == id }) else {
+            ex.error("找不到 prompt：\(id)", status: 404, type: "not_found_error")
+            return
+        }
+        ex.json(p.asJSONObject)
+    }
+
+    // MARK: POST /v1/prompts
+
+    private func upsertPrompt(_ req: GatewayRequest, ex: HTTPExchange) {
+        struct Body: Decodable {
+            var name: String
+            var content: String
+            var tags: [String]?
+        }
+        do {
+            let body = try JSONDecoder.freeroute.decode(Body.self, from: req.body)
+            guard !body.name.trimmingCharacters(in: .whitespaces).isEmpty,
+                  !body.content.trimmingCharacters(in: .whitespaces).isEmpty else {
+                ex.error("name 与 content 不能为空", status: 400)
+                return
+            }
+            let saved = PromptStore().upsert(name: body.name, content: body.content, tags: body.tags ?? [])
+            ex.json(saved.asJSONObject)
+        } catch {
+            ex.error("请求体解析失败：\(error.localizedDescription)", status: 400)
+        }
+    }
+
+    // MARK: DELETE /v1/prompts/{id}
+
+    private func deletePrompt(_ id: String, ex: HTTPExchange) {
+        if PromptStore().delete(id: id) {
+            ex.json(["id": id, "deleted": true])
+        } else {
+            ex.error("找不到 prompt：\(id)", status: 404, type: "not_found_error")
+        }
     }
 
     // MARK: 并发闸门
@@ -862,6 +939,7 @@ struct AgentIn: Decodable {
     var toolTimeout: Double?             // 工具超时秒数
     var includeTools: Bool?              // 是否透传 tools，默认 true
     var systemPrompt: String?            // 额外注入的 system 提示
+    var prompt: String?                  // 引用已保存 prompt 的名称（PromptStore）
     var temperature: Double?
     var topP: Double?
     var maxTokens: Int?
