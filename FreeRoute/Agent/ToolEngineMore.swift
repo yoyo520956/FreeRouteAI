@@ -21,15 +21,14 @@ extension ToolEngine {
         guard let path = call.argString("path") else { throw ToolRuntimeError.invalid("缺少 path") }
         let url = try AuthorizedFiles.exists(path)
         let data = try Data(contentsOf: url)
-        guard let handler = VNImageRequestHandler(data: data, options: [:]) else {
-            throw ToolRuntimeError.failed("ImageIO 无法解码该图片数据")
-        }
+        let handler = VNImageRequestHandler(data: data, options: [:])
         let req = VNRecognizeTextRequest()
         req.recognitionLevel = .accurate
         req.recognitionLanguages = ["zh-Hans", "en-US"]
         req.usesLanguageCorrection = true
         try handler.perform([req])
-        let obs = handler.results?.first?.results ?? []
+        // VNRecognizeTextRequest 结果在 req.results
+        let obs = req.results ?? []
         guard !obs.isEmpty else {
             return "OCR 引擎：Apple Vision VNRecognizeTextRequest（accurate，zh-Hans+en-US）\n文件：\(url.lastPathComponent)（\(data.count) 字节）\n结果：未识别到文字（空白图或无文本图片）。"
         }
@@ -50,14 +49,14 @@ extension ToolEngine {
               let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] else {
             throw ToolRuntimeError.failed("ImageIO 无法读取图片属性（文件可能不是有效图片）")
         }
-        func int(_ key: String) -> Int? { (props[key as CFString] as? NSNumber)?.intValue }
-        let w = int(kCGImagePropertyPixelWidth as String) ?? 0
-        let h = int(kCGImagePropertyPixelHeight as String) ?? 0
-        let orientation = int(kCGImagePropertyOrientation as String) ?? 1
-        let fmtID = props[kCGImagePropertyFormat as String] as? Int
-        let fmt = fmtID.map { UTType(imageContentType: $0)?.identifier ?? "未知" } ?? "未知"
-        let dpi = (props[kCGImagePropertyDPIWidth as String] as? NSNumber)?.doubleValue ?? 0
-        let dpiH = (props[kCGImagePropertyDPIHeight as String] as? NSNumber)?.doubleValue ?? 0
+        func int(_ key: CFString) -> Int? { (props[key] as? NSNumber)?.intValue }
+        let w = int(kCGImagePropertyPixelWidth) ?? 0
+        let h = int(kCGImagePropertyPixelHeight) ?? 0
+        let orientation = int(kCGImagePropertyOrientation) ?? 1
+        let fmtID = props[kCGImagePropertyFormat] as? Int
+        let fmt = fmtID.map { UTType($0)?.preferredFilenameExtension ?? "未知" } ?? "未知"
+        let dpi = (props[kCGImagePropertyDPIWidth] as? NSNumber)?.doubleValue ?? 0
+        let dpiH = (props[kCGImagePropertyDPIHeight] as? NSNumber)?.doubleValue ?? 0
         return "ImageIO CGImageSource 真实读取\n文件：\(url.lastPathComponent)\n字节数：\(data.count)\n像素：\(w) × \(h)\n格式：\(fmt)\n方向：\(orientation)\nDPI：\(String(format: "%.1f", dpi)) × \(String(format: "%.1f", dpiH))"
     }
 
@@ -111,7 +110,6 @@ extension ToolEngine {
             guard let u = comps?.url else { throw ToolRuntimeError.failed("视觉端点 URL 无效") }
             req = try imageEndpointRequest(vm, body: body, url: u)
         }
-        var req = req
         req.timeoutInterval = min(specTimeoutMore("image.understand"), ctx.toolTimeout)
         let (resp, http) = try await URLSession.shared.data(for: req)
         let status = (http as? HTTPURLResponse)?.statusCode ?? 0
@@ -128,7 +126,7 @@ extension ToolEngine {
             text = json?["candidates"]?.array?.first?["content"]?.object?["parts"]?.array?.compactMap { $0["text"]?.string }.joined() ?? ""
         }
         guard !text.isEmpty else {
-            throw ToolRuntimeError.failed("视觉上游返回成功但内容为空（原始响应前 500 字符：\(String(data: resp, encoding: .utf8).prefix(500)))")
+            throw ToolRuntimeError.failed("视觉上游返回成功但内容为空（原始响应前 500 字符：\((String(data: resp, encoding: .utf8) ?? "").prefix(500))")
         }
         return "视觉模型：\(vm.providerName)/\(vm.modelID)（真实 HTTP 调用，HTTP \(status)）\n问题：\(question)\n图片：\(url.lastPathComponent)（\(data.count) 字节）\n回答：\n\(text)"
     }
@@ -153,7 +151,7 @@ extension ToolEngine {
         guard let code = call.argString("code"), !code.isEmpty else { throw ToolRuntimeError.invalid("缺少 code") }
         guard code.count <= 50_000 else { throw ToolRuntimeError.invalid("代码 50000 字符上限") }
         let console = JSConsole()
-        let jsCtx = JSContext()
+        guard let jsCtx = JSContext() else { throw ToolRuntimeError.failed("无法创建 JavaScriptCore 上下文") }
         jsCtx.setObject(console, forKeyedSubscript: "console" as NSString)
         // 包一层函数：用户代码里的 return 才合法；最后把 userCode 的返回值暴露给宿主
         let wrapped = "var __fr_result__ = (function userCode() {\n\(code)\n})(); __fr_result__;"
@@ -192,7 +190,7 @@ extension ToolEngine {
         let (resp, http) = try await URLSession.shared.data(for: req)
         let status = (http as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<400).contains(status) else {
-            throw ToolRuntimeError.failed("远程执行器 HTTP \(status)：\(String(data: resp, encoding: .utf8).prefix(500))")
+            throw ToolRuntimeError.failed("远程执行器 HTTP \(status)：\((String(data: resp, encoding: .utf8) ?? "").prefix(500))")
         }
         return "远程执行器真实调用：\(url.host ?? url.absoluteString)（HTTP \(status)）\n语言：\(lang)\n执行器返回：\n\(String(data: resp, encoding: .utf8) ?? "")"
     }
@@ -327,7 +325,7 @@ extension ToolEngine {
         guard let fromTz = TimeZone(identifier: fromName) else { throw ToolRuntimeError.invalid("未知 IANA 时区：\(fromName)") }
         guard let toTz = TimeZone(identifier: toName) else { throw ToolRuntimeError.invalid("未知 IANA 时区：\(toName)") }
         var date: Date?
-        for opts: [ISO8601DateFormatter.Options] in [[.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]] {
+        for opts in [[ISO8601DateFormatter.Options.withInternetDateTime, .withFractionalSeconds], [.withInternetDateTime]] {
             let f = ISO8601DateFormatter(); f.formatOptions = opts
             if let d = f.date(from: dateStr) { date = d; break }
         }
@@ -363,8 +361,8 @@ extension ToolEngine {
               let to = call.argString("to") else {
             throw ToolRuntimeError.invalid("缺少 value / from / to")
         }
-        // 单位别名表：全部指向 Foundation 官方 Unit，换算走 Unit.converted(to:)
-        let units: [String: Unit] = [
+        // 单位别名表：全部指向 Foundation 官方 Dimension（Unit 的子类，支持换算）
+        let units: [String: Dimension] = [
             "m": UnitLength.meters, "cm": UnitLength.centimeters, "mm": UnitLength.millimeters,
             "km": UnitLength.kilometers, "in": UnitLength.inches, "ft": UnitLength.feet,
             "yd": UnitLength.yards, "mi": UnitLength.miles, "nmi": UnitLength.nauticalMiles,
@@ -392,7 +390,7 @@ extension ToolEngine {
             "gibibyte": UnitInformationStorage.gibibytes, "tebibyte": UnitInformationStorage.tebibytes
         ]
         let supported = "长度：m cm mm km in ft yd mi nmi；质量：kg g mg oz lb st；温度：K C F（°C °F）；数据：B kb mb gb tb kib mib gib tib bit"
-        func find(_ s: String) -> Unit? {
+        func find(_ s: String) -> Dimension? {
             let k = s.lowercased()
             if let u = units[k] { return u }
             for (_, u) in units where u.symbol.lowercased() == k { return u }
@@ -407,7 +405,7 @@ extension ToolEngine {
         guard u1.isCompatible(with: u2) else {
             throw ToolRuntimeError.invalid("\(from)（\(u1.symbol)）与 \(to)（\(u2.symbol)）量纲不同，无法换算")
         }
-        let converted = u1.converted(to: u2, value)
+        let converted = u1.converter.value(fromBaseUnitValue: u2.converter.baseUnitValue(fromValue: value))
         return "Foundation Unit/Dimension 真实换算\n\(value) \(from) = \(String(format: "%.6g", converted)) \(to)"
     }
 

@@ -136,9 +136,6 @@ public enum ToolEngine {
         let (data, response) = try await URLSession.shared.data(for: req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw ToolRuntimeError.failed("搜索服务返回 HTTP \(status)") }
-        guard let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) else {
-            throw ToolRuntimeError.failed("搜索响应不是可解码文本")
-        }
         let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) ?? ""
         // 用捕获组直接抓每个 result__a 锚点，再就近取 snippet —— 不依赖不稳定的块结构
         let anchors = HTMLText.captures(
